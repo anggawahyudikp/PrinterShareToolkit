@@ -1,0 +1,21 @@
+# Runtime output
+Logs/*
+!Logs/.gitkeep
+Backup/*
+!Backup/.gitkeep
+Profiles/*
+!Profiles/.gitkeep
+
+# Build output
+dist/
+*.zip
+test-results*/
+*.zip.sha256
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.tmp

@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest an improvement or new supported workflow
+title: "[FEATURE] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the operational problem, not only the proposed implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: dropdown
+    id: compatibility
+    attributes:
+      label: Does this change core behavior?
+      options:
+        - No
+        - RID500 policy
+        - SMB credential flow
+        - SSR / Point-and-Print primary flow
+        - Native Local Port fallback
+        - Cleanup / Spooler behavior
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: test
+    attributes:
+      label: Suggested test cases

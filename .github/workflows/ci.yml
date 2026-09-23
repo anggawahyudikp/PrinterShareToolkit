@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-powershell-51:
+    runs-on: windows-latest
+    steps:
+      # actions/checkout v4, pinned to the tag commit verified on 2026-09-23.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Run non-mutating regression suite
+        shell: powershell
+        run: |
+          powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Tests\Run-All.ps1 -OutputDirectory .\test-results
+
+      - name: Verify repository version consistency
+        shell: powershell
+        run: |
+          $version=(Get-Content .\VERSION -Raw).Trim()
+          if($version -notmatch '^\d+\.\d+\.\d+(-[A-Za-z0-9.-]+)?$'){throw 'Invalid VERSION.'}
+          foreach($path in '.\README.md','.\CHANGELOG.md','.\PrinterToolkit.bat','.\Core\Toolkit.ps1'){
+            if((Get-Content $path -Raw) -notmatch [regex]::Escape($version)){throw "Version $version missing from $path"}
+          }
+
+      - name: Build verified release package
+        shell: powershell
+        run: |
+          $result=powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Release.ps1 -OutputDirectory .\dist
+          if(-not (Get-ChildItem .\dist\PrinterShareToolkit_v*.zip -ErrorAction SilentlyContinue)){throw 'Release ZIP was not generated.'}
+          if(-not (Get-ChildItem .\dist\PrinterShareToolkit_v*.zip.sha256 -ErrorAction SilentlyContinue)){throw 'Release checksum was not generated.'}
+
+      # actions/upload-artifact v4, pinned to the tag commit verified on 2026-09-23.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: PrinterShareToolkit-release
+          path: |
+            dist/*.zip
+            dist/*.sha256

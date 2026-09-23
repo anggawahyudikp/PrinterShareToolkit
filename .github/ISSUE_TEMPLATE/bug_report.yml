@@ -1,0 +1,90 @@
+name: Bug report
+description: Report a reproducible Printer Share Toolkit problem
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Remove passwords, internal secrets, and sensitive company data before submitting.
+  - type: input
+    id: version
+    attributes:
+      label: Toolkit version
+      placeholder: v1.1.2
+    validations:
+      required: true
+  - type: dropdown
+    id: side
+    attributes:
+      label: Affected flow
+      options:
+        - HOST Setup / Repair
+        - CLIENT Connect / Repair
+        - Diagnostic
+        - Cleanup Queue
+        - Test Print
+        - Windows/SAM Health Check
+        - UI / Other
+    validations:
+      required: true
+  - type: input
+    id: host_windows
+    attributes:
+      label: HOST Windows version/build
+      placeholder: Windows 11 25H2, build xxxxx.xxxx
+  - type: input
+    id: client_windows
+    attributes:
+      label: CLIENT Windows version/build
+      placeholder: Windows 11 25H2, build xxxxx.xxxx
+  - type: input
+    id: printer
+    attributes:
+      label: Printer model
+      placeholder: Epson L3210 / HP LaserJet P2055dn / Xprinter XP-D4601B
+    validations:
+      required: true
+  - type: input
+    id: driver
+    attributes:
+      label: Driver name/version
+      placeholder: EPSON L3210 Series 3.4.0.0
+  - type: input
+    id: network
+    attributes:
+      label: Preflight result
+      placeholder: TCP445=True, TCP135=True, SMB Auth=OK
+  - type: textarea
+    id: error
+    attributes:
+      label: Error / output
+      description: Include the exact error code/message. Sanitize environment details.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run PrinterToolkit.bat
+        2. Select Menu 2
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized log excerpt
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I removed passwords and other credentials.
+          required: true
+        - label: I removed sensitive company/user data from logs and screenshots.
+          required: true
+        - label: I tested with the latest stable toolkit release.
+          required: true
