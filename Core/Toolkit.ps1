@@ -102,7 +102,7 @@ function Confirm-Action {
     $s=if($Default){'[Y/n]'}else{'[y/N]'}
     $a=(Read-Host "$Message $s").Trim().ToLowerInvariant()
     if([string]::IsNullOrWhiteSpace($a)){ return $Default }
-    return $a -in @('y','yes','ya')
+    return $a -in @('y','yes')
 }
 
 function Save-HostTransaction {
@@ -172,16 +172,16 @@ function Get-LatestHostTransactionPath {
 function Restore-HostTransaction {
     param([string]$Path=(Get-LatestHostTransactionPath))
     Show-ToolkitHeader 'ROLLBACK HOST SETUP'
-    if(-not $Path -or -not (Test-Path -LiteralPath $Path)){Write-Log 'Backup transaksi host tidak ditemukan.' 'ERROR';Pause-Toolkit;return}
+    if(-not $Path -or -not (Test-Path -LiteralPath $Path)){Write-Log 'HOST transaction backup was not found.' 'ERROR';Pause-Toolkit;return}
     $resolved=(Resolve-Path -LiteralPath $Path).Path
     $backupRoot=(Resolve-Path -LiteralPath $BackupDir).Path.TrimEnd('\')+'\'
-    if(-not $resolved.StartsWith($backupRoot,[StringComparison]::OrdinalIgnoreCase)){throw 'Rollback hanya menerima state.json dari folder Backup toolkit.'}
+    if(-not $resolved.StartsWith($backupRoot,[StringComparison]::OrdinalIgnoreCase)){throw 'Rollback accepts state.json only from the toolkit Backup folder.'}
     $state=Get-Content -LiteralPath $resolved -Raw | ConvertFrom-Json
-    if($state.Schema -ne 'PSTK.HostTransaction/1' -or $state.Computer -ine $env:COMPUTERNAME){throw 'Backup transaksi bukan milik komputer ini.'}
+    if($state.Schema -ne 'PSTK.HostTransaction/1' -or $state.Computer -ine $env:COMPUTERNAME){throw 'This transaction backup belongs to a different computer.'}
     Write-Host ('Transaction: '+$resolved)
-    if($state.Account.PasswordChanged){Write-Host 'Password Administrator pernah diubah dan TIDAK dapat dikembalikan otomatis.' -ForegroundColor Yellow}
-    if($state.Account.UnlockedByToolkit){Write-Host 'Status locked sebelumnya tidak dapat dipulihkan dengan aman.' -ForegroundColor Yellow}
-    if(-not (Confirm-Action 'Pulihkan printer, firewall, dan status Enabled Administrator yang reversible?' $false)){return}
+    if($state.Account.PasswordChanged){Write-Host 'The Administrator password was changed and CANNOT be restored automatically.' -ForegroundColor Yellow}
+    if($state.Account.UnlockedByToolkit){Write-Host 'The previous locked state cannot be restored safely.' -ForegroundColor Yellow}
+    if(-not (Confirm-Action 'Restore the reversible printer, firewall, and Administrator Enabled-state changes?' $false)){return}
     $failures=@()
     if($state.Printer){
         try{
@@ -191,7 +191,7 @@ function Restore-HostTransaction {
             if($state.Printer.RenderingMode -in @('SSR','CSR','BranchOffice')){$args.RenderingMode=$state.Printer.RenderingMode}
             Set-Printer @args
             $check=Get-Printer -Name $state.Printer.Name -Full -ErrorAction Stop
-            if($check.Shared -ne [bool]$state.Printer.Shared){throw 'Verifikasi rollback shared state gagal.'}
+            if($check.Shared -ne [bool]$state.Printer.Shared){throw 'Shared-state rollback verification failed.'}
         }catch{$failures+=$_.Exception.Message}
     }
     foreach($rule in @($state.FirewallRules)){
@@ -204,18 +204,18 @@ function Restore-HostTransaction {
     }
     if($state.Account -and $state.Account.EnabledByToolkit -and -not $state.Account.Enabled){
         try{
-            if([string]$state.Account.SID -notmatch '-500$'){throw 'SID Administrator backup tidak valid.'}
+            if([string]$state.Account.SID -notmatch '-500$'){throw 'The backed-up Administrator SID is invalid.'}
             $admin=Get-BuiltinAdmin
-            if(-not $admin -or $admin.SID -ne $state.Account.SID){throw 'SID Administrator saat ini berbeda; akun tidak dinonaktifkan.'}
+            if(-not $admin -or $admin.SID -ne $state.Account.SID){throw 'The current Administrator SID differs from the backup; the account was not disabled.'}
             if(Get-Command Disable-LocalUser -ErrorAction SilentlyContinue){Disable-LocalUser -Name $admin.Name -ErrorAction Stop}
-            else{& net.exe user $admin.Name /active:no | Out-Null;if($LASTEXITCODE -ne 0){throw 'Gagal disable account.'}}
+            else{& net.exe user $admin.Name /active:no | Out-Null;if($LASTEXITCODE -ne 0){throw 'Failed to disable the account.'}}
         }catch{$failures+=$_.Exception.Message}
     }
     $state.Status=if($failures.Count){'RollbackPartial'}else{'RolledBack'}
     $state.Updated=(Get-Date).ToString('o')
     $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $resolved -Encoding UTF8
-    if($failures.Count){Write-Log ('Rollback belum lengkap: '+($failures -join ' | ')) 'ERROR'}
-    else{Write-Log 'Rollback host selesai untuk seluruh perubahan yang reversible.' 'OK'}
+    if($failures.Count){Write-Log ('Rollback is incomplete: '+($failures -join ' | ')) 'ERROR'}
+    else{Write-Log 'HOST rollback completed for all reversible changes.' 'OK'}
     Pause-Toolkit
 }
 function Read-Required { param([string]$Prompt); do{$v=(Read-Host $Prompt).Trim()}while([string]::IsNullOrWhiteSpace($v)); return $v }
@@ -244,7 +244,7 @@ function Start-SpoolerSafe {
     if(-not $ok -and -not $Quiet){
         $now=Get-Service Spooler -ErrorAction SilentlyContinue
         $st=if($now){[string]$now.Status}else{'NotFound'}
-        Write-Log "Print Spooler gagal Running dalam ${TimeoutSec}s. Status=$st" 'ERROR'
+        Write-Log "Print Spooler did not reach Running within ${TimeoutSec}s. Status=$st" 'ERROR'
     }
     return $ok
 }
@@ -258,7 +258,7 @@ function Stop-SpoolerSafe {
     if(-not $ok -and -not $Quiet){
         $now=Get-Service Spooler -ErrorAction SilentlyContinue
         $st=if($now){[string]$now.Status}else{'NotFound'}
-        Write-Log "Print Spooler gagal Stop dalam ${TimeoutSec}s. Status=$st" 'WARN'
+        Write-Log "Print Spooler did not stop within ${TimeoutSec}s. Status=$st" 'WARN'
     }
     return $ok
 }
@@ -270,7 +270,7 @@ function Restart-SpoolerSafe {
     $ok=Start-SpoolerSafe -TimeoutSec $TimeoutSec -Quiet
     if(-not $Quiet){
         if($ok){ Write-UiStatus 'OK' 'Print Spooler running' }
-        else { Write-UiStatus 'FAIL' "Print Spooler tidak Running setelah ${TimeoutSec}s" }
+        else { Write-UiStatus 'FAIL' "Print Spooler is not Running after ${TimeoutSec}s" }
     }
     return $ok
 }
@@ -280,7 +280,7 @@ function Test-IsAdmin {
     $p=New-Object Security.Principal.WindowsPrincipal($id)
     $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
-if($env:PSTK_IMPORT_ONLY -ne '1' -and -not (Test-IsAdmin)){ Write-Host 'Jalankan PrinterToolkit.bat sebagai Administrator.' -ForegroundColor Red; Pause-Toolkit; exit 1 }
+if($env:PSTK_IMPORT_ONLY -ne '1' -and -not (Test-IsAdmin)){ Write-Host 'Run PrinterToolkit.bat as Administrator.' -ForegroundColor Red; Pause-Toolkit; exit 1 }
 
 function Get-IPv4List {
     Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
@@ -323,7 +323,7 @@ function Get-AccountCim { param([string]$Name); Get-CimInstance Win32_UserAccoun
 function Enable-BuiltinAdmin {
     param([string]$Name)
     if(Get-Command Enable-LocalUser -ErrorAction SilentlyContinue){ Enable-LocalUser -Name $Name -ErrorAction Stop }
-    else { & net.exe user $Name /active:yes | Out-Null; if($LASTEXITCODE -ne 0){throw 'Gagal enable account.'} }
+    else { & net.exe user $Name /active:yes | Out-Null; if($LASTEXITCODE -ne 0){throw 'Failed to enable the account.'} }
     if($script:ActiveHostJournal -and $script:ActiveHostJournal.State.Account){
         $script:ActiveHostJournal.State.Account.EnabledByToolkit=$true
         Save-HostTransaction
@@ -341,12 +341,12 @@ function Unlock-BuiltinAdmin {
 }
 function Set-BuiltinAdminPassword {
     param([string]$Name)
-    $p1=Read-Host "Password BARU untuk $Name" -AsSecureString
-    $p2=Read-Host 'Ulangi password BARU' -AsSecureString
+    $p1=Read-Host "NEW password for $Name" -AsSecureString
+    $p2=Read-Host 'Repeat the NEW password' -AsSecureString
     $b1=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($p1); $b2=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($p2)
     try{
         $s1=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($b1); $s2=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($b2)
-        if($s1 -ne $s2){ throw 'Konfirmasi password tidak sama.' }
+        if($s1 -ne $s2){ throw 'The password confirmation does not match.' }
         if($script:ActiveHostJournal -and $script:ActiveHostJournal.State.Account){
             $script:ActiveHostJournal.State.Account.PasswordChanged=$true
             $script:ActiveHostJournal.State.NonReversible+=@('Administrator password was changed and cannot be rolled back.')
@@ -383,17 +383,17 @@ function Test-BuiltinAdminPasswordReady {
 function Invoke-AdminReadiness {
     param([switch]$Repair)
     Show-Section 'BUILT-IN ADMINISTRATOR - RID 500'
-    Write-UiStatus 'INFO' 'RID 500 wajib. Local admin lain tidak menggantikan RID 500.'
+    Write-UiStatus 'INFO' 'RID 500 is mandatory. Another local administrator does not replace RID 500.'
 
     $cs=Get-CimInstance Win32_ComputerSystem; $role=[int]$cs.DomainRole
-    if($role -ge 4){ Write-Log 'Domain Controller terdeteksi. Workflow local RID 500 tidak diterapkan.' 'WARN'; return [pscustomobject]@{Ready=$false;Status='DC';Admin=$null} }
+    if($role -ge 4){ Write-Log 'A Domain Controller was detected. The local RID 500 workflow does not apply.' 'WARN'; return [pscustomobject]@{Ready=$false;Status='DC';Admin=$null} }
 
     $a=Get-BuiltinAdmin
     if(-not $a){
-        Write-Log 'CRITICAL: Built-in Administrator RID 500 tidak ditemukan.' 'ERROR'
-        Write-Host 'Toolkit tidak membuat user palsu bernama Administrator.' -ForegroundColor Yellow
-        Write-Host 'User lain yang member Administrators tidak digunakan sebagai pengganti RID 500.' -ForegroundColor Yellow
-        Write-Host 'Gunakan menu Windows/SAM Health Check. Jika RID 500 tetap tidak muncul, repair Windows/SAM diperlukan.' -ForegroundColor Yellow
+        Write-Log 'CRITICAL: Built-in Administrator RID 500 was not found.' 'ERROR'
+        Write-Host 'The toolkit does not create a substitute user named Administrator.' -ForegroundColor Yellow
+        Write-Host 'Another member of Administrators is not accepted as a replacement for RID 500.' -ForegroundColor Yellow
+        Write-Host 'Use Windows/SAM Health Check. If RID 500 is still missing, Windows/SAM repair is required.' -ForegroundColor Yellow
         return [pscustomobject]@{Ready=$false;Status='RID500_NOT_FOUND';Admin=$null}
     }
 
@@ -424,34 +424,34 @@ function Invoke-AdminReadiness {
 
     if($Repair){
         if(-not $a.Enabled){
-            Write-Log 'Built-in Administrator RID 500 masih Disabled.' 'WARN'
-            if(Confirm-Action 'RID 500 wajib aktif. Enable sekarang?' $true){
+            Write-Log 'Built-in Administrator RID 500 is disabled.' 'WARN'
+            if(Confirm-Action 'RID 500 must be enabled. Enable it now?' $true){
                 Enable-BuiltinAdmin $a.Name
                 Write-Log 'Built-in Administrator RID 500 enabled.' 'OK'
             } else {
-                Write-Log 'STOP: RID 500 wajib Enabled. Local admin lain tidak dipakai sebagai pengganti.' 'ERROR'
+                Write-Log 'STOP: RID 500 must be enabled. Another local administrator is not accepted as a replacement.' 'ERROR'
                 return [pscustomobject]@{Ready=$false;Status='RID500_DISABLED';Admin=$a}
             }
             $a=Get-BuiltinAdmin
             if(-not $a.Enabled){
-                Write-Log 'STOP: RID 500 tetap Disabled setelah proses enable.' 'ERROR'
+                Write-Log 'STOP: RID 500 is still disabled after the enable operation.' 'ERROR'
                 return [pscustomobject]@{Ready=$false;Status='RID500_ENABLE_FAILED';Admin=$a}
             }
         }
 
         $c=Get-AccountCim $a.Name
         if($c -and $c.Lockout){
-            Write-Log 'Built-in Administrator RID 500 sedang Locked.' 'WARN'
-            if(Confirm-Action 'RID 500 wajib tidak locked. Unlock sekarang?' $true){
+            Write-Log 'Built-in Administrator RID 500 is locked.' 'WARN'
+            if(Confirm-Action 'RID 500 must be unlocked. Unlock it now?' $true){
                 Unlock-BuiltinAdmin $a.Name
                 Write-Log 'Built-in Administrator RID 500 unlocked.' 'OK'
             } else {
-                Write-Log 'STOP: RID 500 masih Locked. Host setup tidak dilanjutkan.' 'ERROR'
+                Write-Log 'STOP: RID 500 is still locked. HOST setup will not continue.' 'ERROR'
                 return [pscustomobject]@{Ready=$false;Status='RID500_LOCKED';Admin=$a}
             }
             $c=Get-AccountCim $a.Name
             if($c -and $c.Lockout){
-                Write-Log 'STOP: RID 500 tetap Locked setelah proses unlock.' 'ERROR'
+                Write-Log 'STOP: RID 500 is still locked after the unlock operation.' 'ERROR'
                 return [pscustomobject]@{Ready=$false;Status='RID500_UNLOCK_FAILED';Admin=$a}
             }
         }
@@ -459,23 +459,23 @@ function Invoke-AdminReadiness {
         $a=Get-BuiltinAdmin
         $passReady=Test-BuiltinAdminPasswordReady $a
         if(-not $passReady){
-            Write-Log 'Built-in Administrator RID 500 belum memiliki password yang dapat dianggap READY.' 'WARN'
-            if(Confirm-Action 'RID 500 wajib punya password. Set/reset password sekarang?' $true){
+            Write-Log 'Built-in Administrator RID 500 does not have a password-ready state.' 'WARN'
+            if(Confirm-Action 'RID 500 requires a password. Set or reset it now?' $true){
                 Set-BuiltinAdminPassword $a.Name
-                Write-Log 'Password Built-in Administrator RID 500 diset/reset.' 'OK'
+                Write-Log 'The built-in Administrator RID 500 password was set or reset.' 'OK'
             } else {
-                Write-Log 'STOP: password RID 500 belum READY. Host setup tidak dilanjutkan.' 'ERROR'
+                Write-Log 'STOP: The RID 500 password is not ready. HOST setup will not continue.' 'ERROR'
                 return [pscustomobject]@{Ready=$false;Status='RID500_PASSWORD_NOT_READY';Admin=$a}
             }
             $a=Get-BuiltinAdmin
             $passReady=Test-BuiltinAdminPasswordReady $a
             if(-not $passReady){
-                Write-Log 'STOP: password RID 500 masih tidak dapat diverifikasi setelah set/reset.' 'ERROR'
+                Write-Log 'STOP: The RID 500 password still cannot be verified after the set/reset operation.' 'ERROR'
                 return [pscustomobject]@{Ready=$false;Status='RID500_PASSWORD_VERIFY_FAILED';Admin=$a}
             }
-        } elseif(Confirm-Action 'Reset password Built-in Administrator RID 500?' $false){
+        } elseif(Confirm-Action 'Reset the built-in Administrator RID 500 password?' $false){
             Set-BuiltinAdminPassword $a.Name
-            Write-Log 'Password Built-in Administrator RID 500 direset.' 'OK'
+            Write-Log 'The built-in Administrator RID 500 password was reset.' 'OK'
         }
     }
 
@@ -513,11 +513,11 @@ function Set-PrinterSSR {
     param([string]$PrinterName)
     Init-NativePrintApi
     $d=New-Object PSTK.NativePrint+PRINTER_DEFAULTS; $d.DesiredAccess=0x000F000C; $h=[IntPtr]::Zero
-    if(-not [PSTK.NativePrint]::OpenPrinter($PrinterName,[ref]$h,[ref]$d)){ throw "OpenPrinter gagal. Error=$([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
+    if(-not [PSTK.NativePrint]::OpenPrinter($PrinterName,[ref]$h,[ref]$d)){ throw "OpenPrinter failed. Error=$([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
     try{
         $r1=[PSTK.NativePrint]::SetPrinterDataEx($h,'PrinterDriverData','EMFDespoolingSetting',4,[BitConverter]::GetBytes([uint32]1),4)
         $r2=[PSTK.NativePrint]::SetPrinterDataEx($h,'PrinterDriverData','ForceClientSideRendering',4,[BitConverter]::GetBytes([uint32]0),4)
-        if($r1 -ne 0 -or $r2 -ne 0){throw "SetPrinterDataEx gagal EMF=$r1 FCSR=$r2"}
+        if($r1 -ne 0 -or $r2 -ne 0){throw "SetPrinterDataEx failed. EMF=$r1 FCSR=$r2"}
     }finally{[void][PSTK.NativePrint]::ClosePrinter($h)}
     $reg="HKLM:\SYSTEM\CurrentControlSet\Control\Print\Printers\$PrinterName\PrinterDriverData"; $v=Get-ItemProperty $reg
     $fcsrProp=$v.PSObject.Properties['ForceClientSideRendering']
@@ -546,30 +546,30 @@ function Invoke-HostSetup {
     Write-Tech ("Transaction backup: {0}" -f $script:ActiveHostJournal.Path)
     Write-Step 1 5 'RID500 CHECK'
     $arItems=@(Invoke-AdminReadiness -Repair | Where-Object {$_ -ne $null -and $_.PSObject.Properties['Ready']})
-    if($arItems.Count -eq 0){Write-Log 'Host setup dihentikan: hasil Administrator Readiness tidak valid.' 'ERROR';Pause-Toolkit;return}
+    if($arItems.Count -eq 0){Write-Log 'Host setup stopped: Administrator Readiness returned an invalid result.' 'ERROR';Pause-Toolkit;return}
     $ar=$arItems[-1]
-    if(-not $ar.Ready){Write-Log 'Host setup dihentikan: Administrator belum READY.' 'ERROR';Pause-Toolkit;return}
+    if(-not $ar.Ready){Write-Log 'Host setup stopped: the built-in Administrator is not READY.' 'ERROR';Pause-Toolkit;return}
 
     Write-Step 2 5 'SELECT PRINTER'
     Write-Tech 'NETWORK' 'Yellow'
     if($script:TechnicianMode){ Get-IPv4List|Format-Table -AutoSize|Out-Host }
     $ps=@(Get-Printer -Full -ErrorAction SilentlyContinue|Where-Object{$_.Type -eq 'Local' -and $_.Name -notmatch 'Microsoft Print to PDF|Microsoft XPS|Fax|OneNote'}|Sort-Object Name)
-    if(!$ps){Write-Log 'Tidak ada Local printer.' 'ERROR';Pause-Toolkit;return}
+    if(!$ps){Write-Log 'No local printer was found.' 'ERROR';Pause-Toolkit;return}
     for($i=0;$i -lt $ps.Count;$i++){Write-Host ("[{0}] {1} | Driver={2} | Port={3} | Shared={4} | Status={5}" -f ($i+1),$ps[$i].Name,$ps[$i].DriverName,$ps[$i].PortName,$ps[$i].Shared,$ps[$i].PrinterStatus)}
     $n=0
-    if((-not [int]::TryParse((Read-Host 'Pilih nomor printer'),[ref]$n)) -or $n -lt 1 -or $n -gt $ps.Count){Write-Log 'Pilihan invalid.' 'ERROR';Pause-Toolkit;return}
+    if((-not [int]::TryParse((Read-Host 'Select a printer number'),[ref]$n)) -or $n -lt 1 -or $n -gt $ps.Count){Write-Log 'Invalid selection.' 'ERROR';Pause-Toolkit;return}
     $p=$ps[$n-1]
-    if($p.Type -ne 'Local'){Write-Log 'Re-share printer Type=Connection ditolak.' 'ERROR';Pause-Toolkit;return}
+    if($p.Type -ne 'Local'){Write-Log 'Re-sharing a Type=Connection printer is not allowed.' 'ERROR';Pause-Toolkit;return}
 
     $def=if($p.ShareName){$p.ShareName}else{($p.Name -replace '[\\/:*?"<>|,]','-' -replace '\s+','-')}
     $share=Read-Host "ShareName [$def]"
     if(!$share){$share=$def}
-    if($share -match '[\\/:*?"<>|,]'){Write-Log 'ShareName mengandung karakter tidak aman.' 'ERROR';Pause-Toolkit;return}
+    if($share -match '[\\/:*?"<>|,]'){Write-Log 'ShareName contains unsupported characters.' 'ERROR';Pause-Toolkit;return}
 
     Write-Step 3 5 'SHARE + SSR'
     $bk=Backup-PrinterReg $p.Name
     Set-HostTransactionPrinter -Printer $p -RegistryBackup $bk
-    Write-Log "Backup registry dibuat" 'OK'
+    Write-Log 'Registry backup created.' 'OK'
     Write-Tech "Backup: $bk"
     Set-Printer -Name $p.Name -Shared $true -ShareName $share -RenderingMode SSR
     Write-Log "Sharing enabled: $share" 'OK'
@@ -577,7 +577,7 @@ function Invoke-HostSetup {
     Write-Log "SSR: EMF=$($ssr.EMF), ForceCSR=$($ssr.ForceCSR)" 'OK'
     try{Get-NetFirewallRule -ErrorAction SilentlyContinue|Where-Object{$_.Name -match '^FPS-' -and $_.Direction -eq 'Inbound'}|Enable-NetFirewallRule -ErrorAction SilentlyContinue}catch{}
     if(-not (Restart-SpoolerSafe -TimeoutSec 30)){
-        Write-Log 'HOST setup dihentikan: Print Spooler gagal Running.' 'ERROR'
+        Write-Log 'HOST setup stopped: the Print Spooler failed to reach Running state.' 'ERROR'
         Pause-Toolkit
         return
     }
@@ -587,7 +587,7 @@ function Invoke-HostSetup {
     # FINAL VERIFY + ONE CORRECTION PASS
     $f=Get-Printer -Name $p.Name -Full -ErrorAction SilentlyContinue
     if(-not $f -or -not $f.Shared -or $f.ShareName -ne $share){
-        Write-Log 'Final verify: sharing belum sesuai. Koreksi satu kali.' 'WARN'
+        Write-Log 'Final verification: sharing is not correct. Applying one correction pass.' 'WARN'
         Set-Printer -Name $p.Name -Shared $true -ShareName $share -RenderingMode SSR
         [void](Restart-SpoolerSafe -TimeoutSec 30 -Quiet);Start-Sleep 2
         $f=Get-Printer -Name $p.Name -Full -ErrorAction SilentlyContinue
@@ -598,7 +598,7 @@ function Invoke-HostSetup {
     $fcProp=if($rv){$rv.PSObject.Properties['ForceClientSideRendering']}else{$null}
     $fcsr=if($fcProp){$fcProp.Value}else{$null}
     if($emf -ne 1 -or $fcsr -eq 1){
-        Write-Log 'Final verify: SSR host belum sehat. Koreksi satu kali.' 'WARN'
+        Write-Log 'Final verification: HOST SSR is not healthy. Applying one correction pass.' 'WARN'
         $ssr=Set-PrinterSSR $p.Name
         [void](Restart-SpoolerSafe -TimeoutSec 30 -Quiet);Start-Sleep 2
         $rv=Get-ItemProperty $reg -ErrorAction SilentlyContinue
@@ -607,11 +607,11 @@ function Invoke-HostSetup {
         $fcsr=if($fcProp){$fcProp.Value}else{$null}
     }
     if($f -and $f.PrinterStatus -ne 'Normal'){
-        Write-Log "PrinterStatus=$($f.PrinterStatus). Restart Spooler untuk recheck." 'WARN'
+        Write-Log "PrinterStatus=$($f.PrinterStatus). Restarting the Print Spooler before rechecking." 'WARN'
         [void](Restart-SpoolerSafe -TimeoutSec 30 -Quiet);Start-Sleep 3
         $f=Get-Printer -Name $p.Name -Full -ErrorAction SilentlyContinue
     }
-    if(-not $f){Write-Log 'HOST final verify gagal: queue printer tidak ditemukan setelah perubahan.' 'ERROR';Pause-Toolkit;return}
+    if(-not $f){Write-Log 'HOST final verification failed: the printer queue was not found after the changes.' 'ERROR';Pause-Toolkit;return}
     $spool=Get-Service Spooler -ErrorAction SilentlyContinue
     $tcp445=$false
     try{$tcp445=Test-NetConnection 127.0.0.1 -Port 445 -WarningAction SilentlyContinue -InformationLevel Quiet}catch{}
@@ -675,7 +675,7 @@ function Remove-NetUseSafe {
         [void]$proc.StandardError.ReadToEnd()
         $proc.WaitForExit()
     } catch {
-        # Tidak adanya SMB session adalah kondisi normal; jangan hentikan flow.
+        # The absence of an SMB session is normal; do not stop the workflow.
     }
 }
 
@@ -687,7 +687,7 @@ function Clear-SmbServerSessions {
         if($c.ShareName){ Remove-NetUseSafe -Target "\\$Server\$($c.ShareName)" }
     }
     Remove-NetUseSafe -Target "\\$Server\IPC$"
-    # Tidak adanya koneksi lama adalah kondisi normal.
+    # The absence of an old connection is normal.
 }
 
 function Remove-CmdKeySafe {
@@ -853,20 +853,20 @@ function Remove-StaleMachineConnections {
         $k=(($sharePart -replace '[^A-Za-z0-9]','').ToLowerInvariant())
         if($validKeys.ContainsKey($k)){ continue }
 
-        Write-Log "Stale /ga terdeteksi: $($mc.Printer)" 'WARN'
+        Write-Log "Stale /ga connection detected: $($mc.Printer)" 'WARN'
         try { & rundll32.exe printui.dll,PrintUIEntry /gd /n "$($mc.Printer)" | Out-Null } catch {}
         Start-Sleep 1
         $still=@(Get-MachinePrintConnections -Server $Server | Where-Object {$_.Printer -ieq $mc.Printer})
         if($still.Count -gt 0){
             try {
                 Remove-Item $mc.PSPath -Recurse -Force -ErrorAction Stop
-                Write-Log "Stale /ga registry dibersihkan: $($mc.Printer)" 'OK'
+                Write-Log "Stale /ga registry entry removed: $($mc.Printer)" 'OK'
                 $removed++
             } catch {
-                Write-Log "Gagal membersihkan stale /ga: $($mc.Printer) - $($_.Exception.Message)" 'WARN'
+                Write-Log "Failed to remove stale /ga connection: $($mc.Printer) - $($_.Exception.Message)" 'WARN'
             }
         } else {
-            Write-Log "Stale /ga dibersihkan: $($mc.Printer)" 'OK'
+            Write-Log "Stale /ga connection removed: $($mc.Printer)" 'OK'
             $removed++
         }
     }
@@ -936,7 +936,7 @@ function Invoke-SafeDriverReregister {
 
     $inUse=@(Get-Printer -Full -ErrorAction SilentlyContinue | Where-Object {$_.DriverName -ieq $DriverName})
     if($inUse.Count -gt 0){
-        Write-Log "Driver '$DriverName' sedang dipakai queue lain; re-register destructive dilewati." 'WARN'
+        Write-Log "Driver '$DriverName' is used by another queue; destructive re-registration was skipped." 'WARN'
         return $true
     }
 
@@ -948,7 +948,7 @@ function Invoke-SafeDriverReregister {
     try {
         $proc=Start-Process -FilePath powershell.exe -ArgumentList @('-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand',$encoded) -WindowStyle Hidden -PassThru
         if(-not $proc.WaitForExit(30000)){
-            Write-Log "Remove-PrinterDriver timeout untuk '$DriverName'; melepas PrintIsolationHost lalu lanjut." 'WARN'
+            Write-Log "Remove-PrinterDriver timed out for '$DriverName'; releasing PrintIsolationHost before continuing." 'WARN'
             try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
             [void](Stop-SpoolerSafe -TimeoutSec 15 -Quiet)
             try { Get-Process PrintIsolationHost -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
@@ -956,22 +956,22 @@ function Invoke-SafeDriverReregister {
             [void](Start-SpoolerSafe -TimeoutSec 30 -Quiet)
         }
     } catch {
-        Write-Log "Soft re-register driver gagal dijalankan: $($_.Exception.Message)" 'WARN'
+        Write-Log "Soft driver re-registration could not be started: $($_.Exception.Message)" 'WARN'
     }
 
     [void](Restart-SpoolerSafe -TimeoutSec 30 -Quiet); Start-Sleep 2
     try {
         Add-PrinterDriver -Name $DriverName -ErrorAction Stop
-        Write-Log "Driver native diregister ulang: $DriverName" 'OK'
+        Write-Log "Native driver re-registered: $DriverName" 'OK'
         return $true
     } catch {
         # It may already be registered and healthy even if Add-PrinterDriver reports an error.
         $d=@(Get-PrinterDriver -ErrorAction SilentlyContinue | Where-Object {$_.Name -ieq $DriverName}) | Select-Object -First 1
         if($d){
-            Write-Log "Driver native tetap terdaftar: $DriverName" 'OK'
+            Write-Log "Native driver remains registered: $DriverName" 'OK'
             return $true
         }
-        Write-Log "Driver '$DriverName' tidak dapat diregister ulang: $($_.Exception.Message)" 'ERROR'
+        Write-Log "Driver '$DriverName' could not be re-registered: $($_.Exception.Message)" 'ERROR'
         return $false
     }
 }
@@ -1001,7 +1001,7 @@ function Get-NativeLocalFallbackPrinter {
 function Invoke-PendingDeletionQueueCleanup {
     param([Parameter(Mandatory)][string]$PrinterName)
 
-    Write-Log "Queue '$PrinterName' berstatus PendingDeletion. Menyelesaikan stale deletion sebelum fallback dilanjutkan." 'WARN'
+    Write-Log "Queue '$PrinterName' is in PendingDeletion state. Completing stale deletion before continuing with fallback." 'WARN'
 
     # Best effort: release print jobs/driver-host handles, then cycle Spooler so
     # Windows can finalize a deletion that is already pending. We deliberately
@@ -1021,11 +1021,11 @@ function Invoke-PendingDeletionQueueCleanup {
 
     $after=@(Get-Printer -Full -ErrorAction SilentlyContinue | Where-Object {$_.Name -ieq $PrinterName}) | Select-Object -First 1
     if(-not $after){
-        Write-Log "PendingDeletion selesai; stale queue sudah hilang: $PrinterName" 'OK'
+        Write-Log "PendingDeletion completed; the stale queue is gone: $PrinterName" 'OK'
         return
     }
     if($after.PrinterStatus -ne 'PendingDeletion'){
-        Write-Log "Queue pulih dari PendingDeletion: $PrinterName ($($after.PrinterStatus))" 'OK'
+        Write-Log "Queue recovered from PendingDeletion: $PrinterName ($($after.PrinterStatus))" 'OK'
         return
     }
 
@@ -1041,11 +1041,11 @@ function Invoke-PendingDeletionQueueCleanup {
 
     $left=@(Get-Printer -Full -ErrorAction SilentlyContinue | Where-Object {$_.Name -ieq $PrinterName}) | Select-Object -First 1
     if($left -and $left.PrinterStatus -eq 'PendingDeletion'){
-        Write-Log "Stale queue masih PendingDeletion; toolkit akan mengabaikannya dan membuat queue pengganti dengan nama unik." 'WARN'
+        Write-Log 'The stale queue is still PendingDeletion; the toolkit will ignore it and create a replacement queue with a unique name.' 'WARN'
     } elseif($left) {
-        Write-Log "Queue stale berubah status menjadi $($left.PrinterStatus)." 'OK'
+        Write-Log "The stale queue changed state to $($left.PrinterStatus)." 'OK'
     } else {
-        Write-Log "Stale PendingDeletion queue berhasil dibersihkan." 'OK'
+        Write-Log 'The stale PendingDeletion queue was removed.' 'OK'
     }
 }
 
@@ -1062,15 +1062,15 @@ function Invoke-NativeLocalPortFallback {
 
     $driverName=Resolve-LocalPrinterDriverName -ExpectedDisplayName $ExpectedDisplayName
     if(-not $driverName){
-        Write-Log "Driver native untuk '$ExpectedDisplayName' belum tersedia di CLIENT. Local-port fallback tidak dipaksakan." 'ERROR'
-        Write-Host 'Install driver vendor/native yang sesuai di CLIENT, lalu jalankan Menu 2 lagi.' -ForegroundColor Yellow
+        Write-Log "A native driver for '$ExpectedDisplayName' is not available on the CLIENT. Local-port fallback was not forced." 'ERROR'
+        Write-Host 'Install the correct vendor/native driver on the CLIENT, then run Menu 2 again.' -ForegroundColor Yellow
         return $null
     }
     Write-Log "Native driver CLIENT: $driverName" 'OK'
 
     $existing=Get-NativeLocalFallbackPrinter -UncPort $unc -DriverName $driverName
     if($existing){
-        Write-Log "Native local-port queue sudah ada dan stabil: $($existing.Name)" 'OK'
+        Write-Log "A stable native local-port queue already exists: $($existing.Name)" 'OK'
         return $existing
     }
 
@@ -1079,7 +1079,7 @@ function Invoke-NativeLocalPortFallback {
         Invoke-PendingDeletionQueueCleanup -PrinterName $pending.Name
         $existing=Get-NativeLocalFallbackPrinter -UncPort $unc -DriverName $driverName
         if($existing){
-            Write-Log "Native local-port queue kembali stabil: $($existing.Name)" 'OK'
+            Write-Log "The native local-port queue is stable again: $($existing.Name)" 'OK'
             return $existing
         }
     }
@@ -1092,9 +1092,9 @@ function Invoke-NativeLocalPortFallback {
     if(-not $port){
         try {
             Add-PrinterPort -Name $unc -ErrorAction Stop
-            Write-Log "Local Port dibuat: $unc" 'OK'
+            Write-Log "Local Port created: $unc" 'OK'
         } catch {
-            Write-Log "Gagal membuat Local Port '$unc': $($_.Exception.Message)" 'ERROR'
+            Write-Log "Failed to create Local Port '$unc': $($_.Exception.Message)" 'ERROR'
             return $null
         }
     }
@@ -1110,7 +1110,7 @@ function Invoke-NativeLocalPortFallback {
         Add-Printer -Name $queueName -DriverName $driverName -PortName $unc -ErrorAction Stop
         Start-Sleep 3
     } catch {
-        Write-Log "Native Local Port install gagal: $($_.Exception.Message)" 'ERROR'
+        Write-Log "Native Local Port installation failed: $($_.Exception.Message)" 'ERROR'
         return $null
     }
 
@@ -1122,7 +1122,7 @@ function Invoke-NativeLocalPortFallback {
             $p=Get-NativeLocalFallbackPrinter -UncPort $unc -DriverName $driverName
         }
     }
-    if($p){ Write-Log "Native Local Port berhasil dan stabil: $($p.Name)" 'OK' }
+    if($p){ Write-Log "Native Local Port is installed and stable: $($p.Name)" 'OK' }
     return $p
 }
 
@@ -1220,7 +1220,7 @@ function Invoke-ClientSelfCorrection {
     Write-Host '=== AUTO-CORRECTION PASS ===' -ForegroundColor Yellow
 
     $policy=Set-ClientSSR
-    if($policy -eq 1){ Write-Log 'SSR policy dipastikan = 1.' 'OK' }
+    if($policy -eq 1){ Write-Log 'SSR policy confirmed at 1.' 'OK' }
 
     [void](Remove-StaleMachineConnections -Server $Server -ValidShareRecords $ShareRecords)
 
@@ -1230,8 +1230,8 @@ function Invoke-ClientSelfCorrection {
     }
 
     if($Printer -and $Printer.Type -eq 'Connection' -and $Printer.RenderingMode -ne 'SSR'){
-        Write-Log "Connection masih $($Printer.RenderingMode). Recreate satu kali setelah SSR policy." 'WARN'
-        try { Remove-Printer -Name $Printer.Name -ErrorAction Stop } catch { Write-Log "Gagal remove connection untuk repair: $($_.Exception.Message)" 'WARN' }
+        Write-Log "Connection is still using $($Printer.RenderingMode). Recreating it once after applying the SSR policy." 'WARN'
+        try { Remove-Printer -Name $Printer.Name -ErrorAction Stop } catch { Write-Log "Failed to remove the connection for repair: $($_.Exception.Message)" 'WARN' }
         [void](Restart-SpoolerSafe -TimeoutSec 30 -Quiet)
         Start-Sleep 2
         $Printer=$null
@@ -1239,7 +1239,7 @@ function Invoke-ClientSelfCorrection {
 
     if(-not $Printer){
         $unc="\\$Server\$Share"
-        Write-Log "Repair install /in satu kali: $unc" 'INFO'
+        Write-Log "One repair installation attempt with /in: $unc" 'INFO'
         $repairProc=$null
         try { $repairProc=Start-Process -FilePath rundll32.exe -ArgumentList @('printui.dll,PrintUIEntry','/in','/n',"`"$unc`"") -PassThru } catch {}
         $deadline=(Get-Date).AddSeconds(120)
@@ -1253,7 +1253,7 @@ function Invoke-ClientSelfCorrection {
         if($repairProc){
             try{$repairProc.Refresh()}catch{}
             if(-not $repairProc.HasExited){
-                Write-Log 'Repair installer masih berjalan setelah 120 detik; dihentikan untuk mencegah overlap.' 'WARN'
+                Write-Log 'The repair installer is still running after 120 seconds; stopping it to prevent overlapping installers.' 'WARN'
                 try{Stop-Process -Id $repairProc.Id -Force -ErrorAction SilentlyContinue}catch{}
                 Start-Sleep 2
             }
@@ -1262,7 +1262,7 @@ function Invoke-ClientSelfCorrection {
     }
 
     if($Printer -and $Printer.PrinterStatus -ne 'Normal'){
-        Write-Log "PrinterStatus=$($Printer.PrinterStatus). Restart Spooler lalu recheck." 'WARN'
+        Write-Log "PrinterStatus=$($Printer.PrinterStatus). Restarting the Print Spooler before rechecking." 'WARN'
         [void](Restart-SpoolerSafe -TimeoutSec 30 -Quiet)
         Start-Sleep 3
         $Printer=Get-TargetConnection -Server $Server -ExpectedDisplayName $ExpectedDisplayName -BeforeNames $BeforeNames
@@ -1279,10 +1279,10 @@ function Invoke-ClientConnect {
     Write-Step 1 5 'PREFLIGHT'
     $t445=Test-NetConnection $server -Port 445 -WarningAction SilentlyContinue
     Write-UiStatus $(if($t445.TcpTestSucceeded){'OK'}else{'FAIL'}) "TCP 445"
-    if(-not $t445.TcpTestSucceeded){Write-Log 'STOP: TCP 445 gagal.' 'ERROR';Pause-Toolkit;return}
+    if(-not $t445.TcpTestSucceeded){Write-Log 'STOP: TCP 445 failed.' 'ERROR';Pause-Toolkit;return}
     $t135=Test-NetConnection $server -Port 135 -WarningAction SilentlyContinue
     Write-UiStatus $(if($t135.TcpTestSucceeded){'OK'}else{'WARN'}) "TCP 135"
-    if(-not $t135.TcpTestSucceeded){Write-Log 'RPC 135 gagal. Akan lanjut, tetapi koneksi printer bisa bermasalah.' 'WARN'}
+    if(-not $t135.TcpTestSucceeded){Write-Log 'RPC 135 failed. Continuing, but the printer connection may not work correctly.' 'WARN'}
     Write-Log "ForceCSREMFDespooling=$(Set-ClientSSR)" 'OK'
 
     $profile=$null
@@ -1300,7 +1300,7 @@ function Invoke-ClientConnect {
     $admin=Read-Host "HOST Built-in Administrator RID500 logon [$defAdmin]"
     if(!$admin){$admin=$defAdmin}
     if($profile -and ($admin -ine $defAdmin)){
-        Write-Log "STOP: Host Profile menetapkan RID500 '$defAdmin'. Account lain tidak diterima untuk flow strict ini." 'ERROR'
+        Write-Log "STOP: the Host Profile specifies RID500 account '$defAdmin'. Other accounts are not accepted by this strict workflow." 'ERROR'
         Pause-Toolkit;return
     }
 
@@ -1312,14 +1312,14 @@ function Invoke-ClientConnect {
         Clear-SmbServerSessions $server
         Remove-CmdKeySafe -Target $server
         $cmdKeyCode=Add-CmdKeySafe -Target $server -User $admin -Password $plain
-        if($cmdKeyCode -ne 0){throw 'cmdkey gagal'}
+        if($cmdKeyCode -ne 0){throw 'cmdkey failed'}
         $auth=Test-SmbOnce $server $admin $plain
         if(-not $auth.Success){
             Write-Host $auth.Output -ForegroundColor Red
-            if($auth.Locked){Write-Log 'ACCOUNT LOCKED (1909). Retry dihentikan.' 'ERROR'}
-            elseif($auth.Bad){Write-Log 'Credential ditolak (1326). Retry dihentikan.' 'ERROR'}
+            if($auth.Locked){Write-Log 'ACCOUNT LOCKED (1909). Retries stopped.' 'ERROR'}
+            elseif($auth.Bad){Write-Log 'Credentials rejected (1326). Retries stopped.' 'ERROR'}
             elseif($auth.Conflict){Write-Log 'SMB conflict (1219).' 'ERROR'}
-            else{Write-Log "SMB auth gagal code=$($auth.Code)" 'ERROR'}
+            else{Write-Log "SMB authentication failed with code=$($auth.Code)" 'ERROR'}
             Pause-Toolkit;return
         }
     }finally{
@@ -1334,25 +1334,25 @@ function Invoke-ClientConnect {
     catch { $view=$_.Exception.Message; $viewCode=1 }
     finally { $ErrorActionPreference=$oldEap }
     if($script:TechnicianMode){ Write-Host $view }
-    if($viewCode -ne 0){Write-Log "NET VIEW gagal. ExitCode=$viewCode" 'ERROR';Pause-Toolkit;return}
+    if($viewCode -ne 0){Write-Log "NET VIEW failed. ExitCode=$viewCode" 'ERROR';Pause-Toolkit;return}
 
     $shareRecords=@(Get-PrinterShareRecordsFromNetView -Text $view)
     $shareKey=(($share -replace '[^A-Za-z0-9]','').ToLowerInvariant())
     $record=@($shareRecords | Where-Object {(($_.ShareName -replace '[^A-Za-z0-9]','').ToLowerInvariant()) -eq $shareKey}) | Select-Object -First 1
     if(-not $record){
-        Write-Log "Share '$share' tidak cocok dengan Print share HOST." 'WARN'
-        if($shareRecords.Count -eq 0){Write-Log 'Tidak ada Print share yang terdeteksi. STOP.' 'ERROR';Pause-Toolkit;return}
-        Write-Host 'Print share yang tersedia:' -ForegroundColor Yellow
+        Write-Log "Share '$share' does not match a HOST print share." 'WARN'
+        if($shareRecords.Count -eq 0){Write-Log 'No print shares were detected. STOP.' 'ERROR';Pause-Toolkit;return}
+        Write-Host 'Available print shares:' -ForegroundColor Yellow
         for($i=0;$i -lt $shareRecords.Count;$i++){
             Write-Host ("[{0}] {1} | {2}" -f ($i+1),$shareRecords[$i].ShareName,$shareRecords[$i].Comment)
         }
-        $pick=Read-Host 'Pilih nomor share yang benar'
+        $pick=Read-Host 'Select the correct share number'
         $idx=0
-        if((-not [int]::TryParse($pick,[ref]$idx)) -or $idx -lt 1 -or $idx -gt $shareRecords.Count){Write-Log 'Pilihan share invalid.' 'ERROR';Pause-Toolkit;return}
+        if((-not [int]::TryParse($pick,[ref]$idx)) -or $idx -lt 1 -or $idx -gt $shareRecords.Count){Write-Log 'Invalid share selection.' 'ERROR';Pause-Toolkit;return}
         $record=$shareRecords[$idx-1]
         $share=$record.ShareName
         $unc="\\$server\$share"
-        Write-Log "Target share dikoreksi menjadi: $share" 'OK'
+        Write-Log "Target share corrected to: $share" 'OK'
     } else {
         $share=$record.ShareName
         $unc="\\$server\$share"
@@ -1385,7 +1385,7 @@ function Invoke-ClientConnect {
     $usingLocalFallback=$false
     $existing=Get-TargetConnection -Server $server -ExpectedDisplayName $expectedDisplayName -BeforeNames @()
     if($existing -and $existing.Type -eq 'Connection' -and $existing.RenderingMode -eq 'SSR' -and $existing.PrinterStatus -eq 'Normal'){
-        Write-Log "Target connection sudah sehat: $($existing.Name)" 'OK'
+        Write-Log "Target connection is already healthy: $($existing.Name)" 'OK'
         $final=$existing
         $method='Existing healthy connection'
     } else {
@@ -1394,40 +1394,40 @@ function Invoke-ClientConnect {
         $interactive=(Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).UserName
         $current="$env:USERDOMAIN\$env:USERNAME"
         if($interactive -and ($interactive -ine $current)){
-            Write-Log "Interactive user '$interactive' berbeda dengan elevated context '$current'." 'WARN'
+            Write-Log "Interactive user '$interactive' differs from elevated context '$current'." 'WARN'
             $exactGa=@(Get-MachinePrintConnections -Server $server | Where-Object {$_.Printer -ieq $unc})
             if($exactGa.Count -eq 0){
-                if(Confirm-Action 'Buat /ga per-computer untuk user interactive? Sign out/in akan diperlukan.' $false){
+                if(Confirm-Action 'Create a per-computer /ga connection for the interactive user? Sign-out and sign-in will be required.' $false){
                     & rundll32.exe printui.dll,PrintUIEntry /ga /n "$unc"
                     Start-Sleep 2
                     $exactGa=@(Get-MachinePrintConnections -Server $server | Where-Object {$_.Printer -ieq $unc})
                 }
             }
             if($exactGa.Count -gt 0){
-                Write-Log "Per-machine connection terdaftar: $unc" 'WARN'
-                Write-Host "STATUS: PENDING LOGON - Sign out -> Sign in user '$interactive', lalu jalankan Menu 2 untuk verifikasi final." -ForegroundColor Yellow
+                Write-Log "Per-machine connection registered: $unc" 'WARN'
+                Write-Host "STATUS: PENDING LOGON - Sign out, sign in as '$interactive', then run Menu 2 for final verification." -ForegroundColor Yellow
             } else {
-                Write-Log 'Tidak membuat /ga. Jalankan toolkit dari user yang akan memakai printer.' 'ERROR'
+                Write-Log 'The /ga connection was not created. Run the toolkit from the account that will use the printer.' 'ERROR'
             }
             Pause-Toolkit;return
         }
 
         if($existing -and ($existing.RenderingMode -ne 'SSR')){
-            Write-Log "Existing connection belum SSR ($($existing.RenderingMode)). Akan dikoreksi." 'WARN'
-            try { Remove-Printer -Name $existing.Name -ErrorAction Stop; Start-Sleep 2 } catch { Write-Log "Gagal remove existing connection: $($_.Exception.Message)" 'WARN' }
+            Write-Log "The existing connection is not using SSR ($($existing.RenderingMode)). Applying a correction." 'WARN'
+            try { Remove-Printer -Name $existing.Name -ErrorAction Stop; Start-Sleep 2 } catch { Write-Log "Failed to remove the existing connection: $($_.Exception.Message)" 'WARN' }
         }
 
         if(-not (Restart-SpoolerSafe -TimeoutSec 30)){
-            Write-Log 'CLIENT install dihentikan: Print Spooler gagal Running.' 'ERROR'
+            Write-Log 'CLIENT installation stopped: the Print Spooler failed to reach Running state.' 'ERROR'
             Pause-Toolkit
             return
         }
         Start-Sleep 2
         Write-UiStatus 'WORK' 'Primary: SSR / Point-and-Print (PrintUIEntry /in)'
-        Write-Tech 'Tidak ada installer kedua yang dijalankan paralel.'
+        Write-Tech 'No second installer is running in parallel.'
         $method='PrintUIEntry /in'
         try { $proc=Start-Process -FilePath rundll32.exe -ArgumentList @('printui.dll,PrintUIEntry','/in','/n',"`"$unc`"") -PassThru }
-        catch { $proc=$null; Write-Log "Gagal menjalankan /in: $($_.Exception.Message)" 'ERROR' }
+        catch { $proc=$null; Write-Log "Failed to start /in: $($_.Exception.Message)" 'ERROR' }
 
         $deadline=(Get-Date).AddSeconds(180)
         $final=$null
@@ -1443,7 +1443,7 @@ function Invoke-ClientConnect {
         if($proc){
             try{$proc.Refresh()}catch{}
             if(-not $proc.HasExited -and (Get-Date) -ge $deadline){
-                Write-Log 'Installer /in masih berjalan setelah 180 detik; dihentikan sebelum correction pass.' 'WARN'
+                Write-Log 'The /in installer is still running after 180 seconds; stopping it before the correction pass.' 'WARN'
                 try{Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue}catch{}
                 Start-Sleep 2
             }
@@ -1451,7 +1451,7 @@ function Invoke-ClientConnect {
         if(-not $final){$final=Get-TargetConnection -Server $server -ExpectedDisplayName $expectedDisplayName -BeforeNames $beforeNames}
 
         if(-not $final){
-            Write-Log 'PrintUIEntry /in tidak menghasilkan connection. Tidak mengulang installer; mencoba native Local Port fallback.' 'WARN'
+            Write-Log 'PrintUIEntry /in did not create a connection. The installer will not be repeated; trying native Local Port fallback.' 'WARN'
             $final=Invoke-NativeLocalPortFallback -Server $server -Share $share -ExpectedDisplayName $expectedDisplayName
             if($final){
                 $usingLocalFallback=$true
@@ -1461,7 +1461,7 @@ function Invoke-ClientConnect {
     }
 
     if(-not $final){
-        Write-Log 'FAILED: target connection tidak berhasil dibuat.' 'ERROR'
+        Write-Log 'FAILED: the target connection could not be created.' 'ERROR'
         if($script:TechnicianMode){
             Show-Section 'PRINTSERVICE EVENTS - LAST 10 MINUTES'
             $since=(Get-Date).AddMinutes(-10)
@@ -1469,7 +1469,7 @@ function Invoke-ClientConnect {
                 Where-Object {$_.LevelDisplayName -in @('Error','Warning')} |
                 Select-Object TimeCreated,Id,LevelDisplayName,Message | Format-List|Out-Host
         } else {
-            Write-UiStatus 'INFO' "Detail error tersimpan di log. Tekan T di Main Menu untuk Technician View."
+            Write-UiStatus 'INFO' 'Error details were saved to the log. Press T on the Main Menu for Technician View.'
         }
         Pause-Toolkit;return
     }
@@ -1510,27 +1510,27 @@ function Invoke-ClientConnect {
     if($report.Ready){
         Show-ResultCard -Status 'READY TO PRINT' -Printer $final.Name -Method $method -Driver $final.DriverName -Port $final.PortName
         if($usingLocalFallback){
-            Write-Log 'Native Local Port fallback sehat.' 'OK'
+            Write-Log 'Native Local Port fallback is healthy.' 'OK'
         } else {
-            Write-Log 'SSR connection sehat.' 'OK'
+            Write-Log 'SSR connection is healthy.' 'OK'
         }
-        if(Confirm-Action 'Kirim Windows Test Page untuk verifikasi fisik?' $true){
+        if(Confirm-Action 'Send a Windows Test Page for physical verification?' $true){
             & rundll32.exe printui.dll,PrintUIEntry /k /n "$($final.Name)"
-            Write-Log 'Test page command dikirim.' 'INFO'
+            Write-Log 'Test page command sent.' 'INFO'
             Start-Sleep 3
-            if(Confirm-Action 'Apakah halaman test FISIK berhasil keluar?' $false){
-                Write-Log 'STATUS: FULLY VERIFIED - konfigurasi sehat + print fisik berhasil.' 'OK'
+            if(Confirm-Action 'Did the physical test page print successfully?' $false){
+                Write-Log 'STATUS: FULLY VERIFIED - healthy configuration and successful physical print.' 'OK'
             } else {
-                Write-Log 'STATUS: CONFIGURATION READY, tetapi hasil print fisik belum dikonfirmasi.' 'WARN'
+                Write-Log 'STATUS: CONFIGURATION READY, but the physical print result is not confirmed.' 'WARN'
             }
         }
     } else {
         Show-ResultCard -Status 'DEGRADED / FAILED' -Printer $(if($final){$final.Name}else{'-'}) -Method $method -Driver $(if($final){$final.DriverName}else{'-'}) -Port $(if($final){$final.PortName}else{'-'})
         Write-Log ("STATUS: DEGRADED/FAILED - " + ($report.Failed -join ', ')) 'ERROR'
         if($usingLocalFallback){
-            Write-Host 'Native Local Port fallback belum sehat. Cek driver CLIENT, SMB credential, dan share HOST.' -ForegroundColor Yellow
+            Write-Host 'Native Local Port fallback is not healthy. Check the CLIENT driver, SMB credentials, and HOST share.' -ForegroundColor Yellow
         } else {
-            Write-Host 'Toolkit tidak menjalankan /ga otomatis karena koneksi per-user belum sehat.' -ForegroundColor Yellow
+            Write-Host 'The toolkit did not create /ga automatically because the per-user connection is not healthy.' -ForegroundColor Yellow
         }
     }
     Pause-Toolkit
@@ -1546,16 +1546,16 @@ function Invoke-FullDiagnostic {
     Write-Host '[SMB CONNECTIONS]' -ForegroundColor Yellow; Get-SmbConnection -ErrorAction SilentlyContinue|Select ServerName,ShareName,UserName,Dialect,NumOpens|Format-Table -AutoSize
     Write-Host '[PRINTSERVICE ERRORS]' -ForegroundColor Yellow; Get-WinEvent -LogName 'Microsoft-Windows-PrintService/Admin' -MaxEvents 10 -ErrorAction SilentlyContinue|Where-Object{$_.LevelDisplayName -in @('Error','Warning')}|Select TimeCreated,Id,LevelDisplayName,Message|Format-List
     $target=Read-Host 'Optional target HOST IP (ENTER=skip)'; if($target){foreach($pt in 445,135){$r=Test-NetConnection $target -Port $pt -WarningAction SilentlyContinue;Write-Host "TCP ${pt}: $($r.TcpTestSucceeded)"}; & net.exe view "\\$target"}
-    Write-Log 'Full diagnostic selesai.' 'OK'; Pause-Toolkit
+    Write-Log 'Full diagnostic completed.' 'OK'; Pause-Toolkit
 }
 function Invoke-Cleanup {
     Show-ToolkitHeader 'CLEANUP PRINTER QUEUE'
     $all=@(Get-Printer -Full -ErrorAction SilentlyContinue|Sort-Object Name); if(!$all){Pause-Toolkit;return}; for($i=0;$i -lt $all.Count;$i++){Write-Host ("[{0}] {1} | {2} | {3} | {4}" -f ($i+1),$all[$i].Name,$all[$i].DriverName,$all[$i].Type,$all[$i].RenderingMode)}
-    $n=0;if((-not [int]::TryParse((Read-Host 'Nomor printer (0=Cancel)'),[ref]$n)) -or $n -eq 0){return};if($n -lt 1 -or $n -gt $all.Count){return};$p=$all[$n-1];if(Confirm-Action "Hapus '$($p.Name)'?" $false){try{Remove-Printer -Name $p.Name -ErrorAction Stop;Write-Log "Removed: $($p.Name)" 'OK'}catch{Write-Log $_.Exception.Message 'ERROR'}};Pause-Toolkit
+    $n=0;if((-not [int]::TryParse((Read-Host 'Printer number (0=Cancel)'),[ref]$n)) -or $n -eq 0){return};if($n -lt 1 -or $n -gt $all.Count){return};$p=$all[$n-1];if(Confirm-Action "Remove '$($p.Name)'?" $false){try{Remove-Printer -Name $p.Name -ErrorAction Stop;Write-Log "Removed: $($p.Name)" 'OK'}catch{Write-Log $_.Exception.Message 'ERROR'}};Pause-Toolkit
 }
 function Invoke-TestPrint {
     Show-ToolkitHeader 'TEST PRINT'
-    $all=@(Get-Printer -Full -ErrorAction SilentlyContinue|Sort-Object Name);for($i=0;$i -lt $all.Count;$i++){Write-Host ("[{0}] {1} | {2} | {3}" -f ($i+1),$all[$i].Name,$all[$i].Type,$all[$i].PrinterStatus)};$n=0;if((-not [int]::TryParse((Read-Host 'Nomor printer (0=Cancel)'),[ref]$n)) -or $n -eq 0){return};if($n -lt 1 -or $n -gt $all.Count){return};& rundll32.exe printui.dll,PrintUIEntry /k /n "$($all[$n-1].Name)";Write-Log 'Test page dikirim.' 'INFO';Pause-Toolkit
+    $all=@(Get-Printer -Full -ErrorAction SilentlyContinue|Sort-Object Name);for($i=0;$i -lt $all.Count;$i++){Write-Host ("[{0}] {1} | {2} | {3}" -f ($i+1),$all[$i].Name,$all[$i].Type,$all[$i].PrinterStatus)};$n=0;if((-not [int]::TryParse((Read-Host 'Printer number (0=Cancel)'),[ref]$n)) -or $n -eq 0){return};if($n -lt 1 -or $n -gt $all.Count){return};& rundll32.exe printui.dll,PrintUIEntry /k /n "$($all[$n-1].Name)";Write-Log 'Test page sent.' 'INFO';Pause-Toolkit
 }
 function Invoke-HealthCheck { Show-ToolkitHeader 'WINDOWS / SAM HEALTH CHECK'; Write-UiStatus 'INFO' 'READ ONLY: SFC /verifyonly + DISM /ScanHealth'; & sfc.exe /verifyonly; & dism.exe /Online /Cleanup-Image /ScanHealth; Pause-Toolkit }
 
@@ -1592,12 +1592,12 @@ while($true){
             'T'{$script:TechnicianMode=-not $script:TechnicianMode}
             'L'{Start-Process explorer.exe $LogDir}
             '0'{break}
-            default{Write-UiStatus 'WARN' 'Menu tidak valid.';Start-Sleep 1}
+            default{Write-UiStatus 'WARN' 'Invalid menu option.';Start-Sleep 1}
         }
     }catch{
         Write-Log "Unhandled error: $($_.Exception.Message)" 'ERROR'
         if($script:TechnicianMode){Write-Host $_.ScriptStackTrace -ForegroundColor DarkGray}
-        else{Write-UiStatus 'INFO' 'Detail stack trace tersedia di Technician View / log.'}
+        else{Write-UiStatus 'INFO' 'Stack trace details are available in Technician View or the log.'}
         Pause-Toolkit
     }
     if($m -eq '0'){break}

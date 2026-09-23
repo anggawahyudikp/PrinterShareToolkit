@@ -2,82 +2,97 @@
 
 ## TCP 445 = False
 
-Kemungkinan:
-- Routing antar subnet belum tersedia.
-- Firewall memblokir SMB.
-- HOST tidak reachable.
-- File and Printer Sharing belum aktif.
+Possible causes:
 
-Cek routing, firewall, dan konektivitas HOST sebelum mencoba install printer.
+- Routing between subnets is unavailable.
+- A firewall blocks SMB.
+- The HOST is unreachable.
+- File and Printer Sharing is not enabled.
+
+Check routing, firewall rules, and HOST connectivity before installing the
+printer.
 
 ## TCP 135 = False
 
-RPC tidak reachable. Cek firewall/routing HOST dan CLIENT.
+RPC is unreachable. Check firewall rules and routing between the HOST and
+CLIENT.
 
 ## SMB error 1326
 
-Username/password salah.
+The username or password is incorrect.
 
-Toolkit harus **STOP**. Jangan menambahkan retry password otomatis karena dapat memicu account lockout.
+The toolkit must **STOP**. Do not add automatic password retries because they
+can cause an account lockout.
 
 ## SMB error 1909
 
-Account HOST sedang locked out. Unlock account RID 500 di HOST sebelum retry.
+The HOST account is locked out. Unlock the RID 500 account on the HOST before
+trying again.
 
 ## SMB error 1219
 
-Ada credential/session conflict ke server yang sama. Bersihkan session/credential lama lalu pairing ulang satu kali.
+Another credential or SMB session already exists for the same server. Remove
+the old session or stored credential, then perform one new pairing attempt.
 
 ## Error 0x00000006
 
-Standard shared-printer connection gagal membuat connection object.
+The standard shared-printer method did not create a connection object.
 
-Flow toolkit:
-1. SSR + `PrintUIEntry /in` dicoba sekali.
-2. Jika connection tidak terbentuk, toolkit berpindah ke Native Local Port UNC.
-3. Toolkit tidak menjalankan installer `/in` kedua secara paralel.
+Toolkit flow:
 
-## Error 0x000007D1 — The specified driver is invalid
+1. Try SSR with `PrintUIEntry /in` once.
+2. If no connection is created, move to the Native Local Port UNC fallback.
+3. Do not run a second `/in` installer in parallel.
 
-Indikasi umum: registrasi/rendering driver Windows V3 bermasalah.
+## Error 0x000007D1: The specified driver is invalid
 
-Langkah diagnosis:
-- Buat queue lokal menggunakan driver yang sama ke port `FILE:`.
-- Jika queue lokal juga menghasilkan `0x7D1`, fokus ke driver/core V3 CLIENT.
-- Re-register driver secara terkontrol; jangan langsung mengubah HOST.
+This usually indicates a Windows V3 driver registration or rendering problem.
+
+Diagnostic steps:
+
+- Create a local queue with the same driver and the `FILE:` port.
+- If that local queue also returns `0x7D1`, focus on the CLIENT driver and V3
+  printing components.
+- Re-register the driver in a controlled way before changing the HOST.
 
 ## PrinterStatus = PendingDeletion
 
-Toolkit mencoba:
-- Membersihkan job target secara best effort.
-- Release `PrintIsolationHost` / `splwow64` bila perlu.
-- Cycle Print Spooler.
-- Mengabaikan stale queue dan membuat replacement queue jika Windows belum menghapus object lama.
+The toolkit tries to:
 
-## Spooler tidak Running
+- Remove jobs from the selected queue on a best-effort basis.
+- Release `PrintIsolationHost` or `splwow64` when needed.
+- Cycle the Print Spooler.
+- Ignore the stale queue and create a replacement if Windows has not removed
+  the old object.
 
-Toolkit memakai polling terkontrol. Jika Spooler gagal `Running` setelah timeout, proses berhenti dengan `[FAIL]`.
+## Print Spooler is not Running
 
-Jangan melakukan loop restart tanpa batas.
+The toolkit uses controlled polling. If the Print Spooler does not reach
+`Running` before the timeout, the operation stops with `[FAIL]`.
 
-## ShareName berbeda dengan display name
+Do not restart the service in an unlimited loop.
 
-Gunakan **ShareName** yang terlihat melalui `net view \\HOST`, bukan hanya nama display printer di Settings/Control Panel.
+## ShareName differs from the display name
 
-## Sebelum membuat GitHub issue
+Use the printer **ShareName** shown by `net view \\HOST`, not only the display
+name shown in Settings or Control Panel.
 
-Sanitasi data berikut:
-- Password / credential.
-- Hostname internal.
-- IP internal bila tidak perlu.
-- Nama user/domain/perusahaan.
-- Isi `Profiles\` dan `Logs\` yang sensitif.
+## Before opening a GitHub issue
 
-Sertakan:
+Remove or redact:
+
+- Passwords and credential material.
+- Internal hostnames.
+- Internal IP addresses when they are not needed.
+- User, domain, or company names.
+- Sensitive content from `Profiles\` and `Logs\`.
+
+Include:
+
 - Toolkit version.
-- Windows build HOST dan CLIENT.
+- HOST and CLIENT Windows builds.
 - Printer model.
-- Driver name/version.
-- Error code.
-- Metode yang gagal (`/in` atau Local Port fallback).
-- Log yang sudah disanitasi.
+- Driver name and version.
+- Exact error code.
+- The method that failed (`/in` or Native Local Port fallback).
+- A sanitized log.

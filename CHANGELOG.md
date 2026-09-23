@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+- Standardized the toolkit interface, runtime messages, comments, and public documentation in English.
+- Replaced the Indonesian usage guide with `Docs/USER_GUIDE.md` and updated release packaging references.
+- Added the project background and native Windows sharing rationale, including where Mobility Print may be less suitable for specialized printer settings.
+
 ## v1.1.2
 - Fixed elevation/startup from folders containing apostrophes, ampersands, spaces, exclamation marks, and Unicode characters by moving elevation into `Core/Launcher.ps1` and passing paths as data.
 - Added a password-free HOST transaction journal and Menu 8 rollback for reversible printer, firewall, and RID-500 Enabled-state changes.
@@ -9,7 +14,7 @@
 - Pinned GitHub Actions, restricted workflow permissions, updated documentation, and added publication provenance gates.
 
 ## v1.1.1 Documentation update
-- Added `Docs/PANDUAN_PENGGUNAAN.md`: quick start, HOST/CLIENT flow, menu guide, status explanation, common errors, security, and troubleshooting.
+- Added `Docs/USER_GUIDE.md`: quick start, HOST/CLIENT flow, menu guide, status explanation, common errors, security, and troubleshooting.
 
 ## v1.1.1
 - UI hotfix Print Spooler: suppress warning flood "Waiting for service Print Spooler...".
@@ -41,23 +46,23 @@ PRINTER SHARE TOOLKIT CHANGELOG
 
 
 ## v1.0.11
-- Fix false DEGRADED/FAILED setelah native Local Port fallback berhasil tetapi queue lama berstatus PendingDeletion.
-- Fallback sekarang tidak lagi menganggap PendingDeletion sebagai queue reusable.
-- Self-heal PendingDeletion: remove queued jobs (best effort), release PrintIsolationHost/splwow64, cycle Spooler, lalu re-check.
-- Jika stale queue tetap PendingDeletion, toolkit mengabaikannya dan membuat queue replacement dengan nama unik.
-- Final health check memprioritaskan queue Local Port yang stabil, sehingga stale pending-delete object tidak dipilih sebagai target.
-- Tidak menghapus driver package dan tidak membersihkan global spool folder.
-- Primary method tetap SSR + PrintUIEntry /in; Local Port tetap hanya fallback.
+- Fixed a false DEGRADED/FAILED result when the Native Local Port fallback succeeded but an old queue remained in `PendingDeletion`.
+- The fallback no longer treats a `PendingDeletion` queue as reusable.
+- Added `PendingDeletion` self-healing: remove queued jobs on a best-effort basis, release `PrintIsolationHost`/`splwow64`, cycle the Print Spooler, and check again.
+- If the stale queue remains in `PendingDeletion`, the toolkit ignores it and creates a uniquely named replacement queue.
+- The final health check prioritizes a stable Local Port queue instead of selecting a stale pending-delete object.
+- The recovery flow does not remove driver packages or purge the global spool folder.
+- SSR with `PrintUIEntry /in` remains the primary method; Native Local Port remains a fallback only.
 
 
 ## v1.0.10
-- Fix kasus PrintUIEntry /in gagal dengan "Operation failed with error 0x00000006" lalu auto-correction mengulang installer yang sama.
-- Jika /in tidak menghasilkan network Connection, toolkit sekarang TIDAK menjalankan /in kedua.
-- Menambahkan fallback native Local Port UNC (\\HOST\Share) menggunakan driver vendor/native di CLIENT; tidak memakai PaperCut.
-- Driver yang sudah staged tetapi belum ter-register dicoba register dengan Add-PrinterDriver.
-- Soft re-register driver dilakukan hanya bila tidak ada queue lain yang memakai driver; operasi remove diberi timeout agar toolkit tidak hang.
-- Health check baru untuk fallback: SMB/TCP445, native driver, UNC Local Port, Type=Local, correct port, PrinterStatus.
-- Mempertahankan lockout guard satu kali, parser NET VIEW v1.0.8, dan empty-array fix v1.0.9.
+- Fixed the case where `PrintUIEntry /in` returned `Operation failed with error 0x00000006` and auto-correction repeated the same installer.
+- If `/in` does not create a network `Connection`, the toolkit does not run a second `/in` installer.
+- Added a Native Local Port UNC fallback (`\\HOST\Share`) using the vendor/native driver installed on the CLIENT, without PaperCut.
+- If a driver package is staged but not registered, the toolkit attempts to register it with `Add-PrinterDriver`.
+- Soft driver re-registration runs only when no other queue uses the driver; driver removal has a timeout so the toolkit cannot hang indefinitely.
+- Added fallback health checks for SMB/TCP 445, the native driver, UNC Local Port, `Type=Local`, the expected port, and `PrinterStatus`.
+- Retained the one-attempt lockout guard, the v1.0.8 `NET VIEW` parser, and the v1.0.9 empty-array fix.
 
 
 ## v1.0.9

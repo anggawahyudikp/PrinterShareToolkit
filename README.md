@@ -1,8 +1,20 @@
 # Printer Share Toolkit
 
-Native Windows printer-sharing setup, repair, diagnostic, and cleanup toolkit.
+Native Windows USB printer sharing with guided setup, repair, diagnostics, and cleanup.
 
 Current version: **v1.1.2**
+
+## Why I Built This Toolkit
+
+I started building Printer Share Toolkit after dealing with Windows printer-sharing problems over and over again.
+
+Sharing a USB printer sounds simple, but in practice it can turn into hours of troubleshooting. Sometimes the problem is caused by credentials, SMB settings, the Print Spooler, printer drivers, Windows security policies, or an old printer connection that was never removed properly. There are also many Windows error codes, and the same error does not always have the same cause.
+
+Mobility Print is a good solution and works well for many common printers. The downside is that less common brands and specialized printers can be more difficult to configure. Settings such as custom paper sizes, margins, page layouts, continuous paper, or other vendor-specific options may not always be available or easy to manage.
+
+That is why this toolkit focuses on native Windows printer sharing. It gives administrators more control over the original printer driver and its settings. It is not intended to replace Mobility Print completely, but to provide another option when native driver features are important.
+
+This toolkit was not built overnight. Most of its features came from real troubleshooting cases, repeated tests, failed attempts, and lessons learned along the way. My goal is to turn that experience into a simpler and more consistent process for other IT administrators.
 
 ## Features
 
@@ -95,7 +107,7 @@ Native Local Port UNC fallback
 
 ## Documentation
 
-- [Panduan Penggunaan](Docs/PANDUAN_PENGGUNAAN.md)
+- [User Guide](Docs/USER_GUIDE.md)
 - [Troubleshooting](Docs/TROUBLESHOOTING.md)
 - [Flowchart](Docs/FLOWCHART.md)
 - [Contributing](CONTRIBUTING.md)

@@ -8,8 +8,8 @@ This repository is intended for release under the MIT License.
 
 Owner declaration:
 
-> Saya memiliki atau telah memperoleh hak atas seluruh kode dan aset proyek
-> ini, serta mengizinkan semuanya dipublikasikan dengan Lisensi MIT.
+> I own or have obtained the necessary rights to all project code and assets,
+> and I authorize their publication under the MIT License.
 
 A technical file review can identify included files and obvious third-party
 materials, but it cannot determine who legally owns employee-created work,

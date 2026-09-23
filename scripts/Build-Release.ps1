@@ -9,7 +9,7 @@ if($Version -notmatch '^\d+\.\d+\.\d+(-[A-Za-z0-9.-]+)?$'){throw 'VERSION format
 $ReleaseFiles=@(
     'PrinterToolkit.bat','Core/Launcher.ps1','Core/Toolkit.ps1','VERSION','README.md',
     'CHANGELOG.md','LICENSE','SECURITY.md','CONTRIBUTING.md','Docs/PROVENANCE.md',
-    'Docs/PANDUAN_PENGGUNAAN.md','Docs/TROUBLESHOOTING.md','Docs/FLOWCHART.md',
+    'Docs/USER_GUIDE.md','Docs/TROUBLESHOOTING.md','Docs/FLOWCHART.md',
     'Docs/images/flowchart.png'
 )
 $OutputPath=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
