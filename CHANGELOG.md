@@ -1,9 +1,16 @@
 # Changelog
 
 ## Unreleased
+
+## v1.1.3
 - Standardized the toolkit interface, runtime messages, comments, and public documentation in English.
 - Replaced the Indonesian usage guide with `Docs/USER_GUIDE.md` and updated release packaging references.
 - Added the project background and native Windows sharing rationale, including where Mobility Print may be less suitable for specialized printer settings.
+- Added a password-free HOST machine SID to new profiles and a CLIENT preflight that stops before credential input when the HOST and CLIENT identities collide.
+- Added a bounded Full Diagnostic check for System/LsaSrv Event 6167, which confirms Windows duplicate-machine-SID authentication protection.
+- Clarified that error 1326 is generic and must not trigger repeated password resets when Event 6167 or the profile proves a duplicate SID.
+- Added safe recovery guidance based on Microsoft-supported rebuild or Sysprep generalization; the toolkit never automates Sysprep or unsupported SID changers.
+- Fixed the documented no-argument release build command on Windows PowerShell 5.1 by resolving the default output path at runtime.
 
 ## v1.1.2
 - Fixed elevation/startup from folders containing apostrophes, ampersands, spaces, exclamation marks, and Unicode characters by moving elevation into `Core/Launcher.ps1` and passing paths as data.

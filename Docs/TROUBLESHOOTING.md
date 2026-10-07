@@ -19,10 +19,34 @@ CLIENT.
 
 ## SMB error 1326
 
-The username or password is incorrect.
+Error 1326 is a generic authentication failure. It can indicate an incorrect
+username or password, but it is not proof that the password is wrong.
 
 The toolkit must **STOP**. Do not add automatic password retries because they
 can cause an account lockout.
+
+If the same password succeeds locally on the HOST, run Full Diagnostic on the
+HOST and inspect the bounded LsaSrv Event 6167 section. Event 6167 confirms
+that Windows rejected authentication because the HOST and CLIENT use the same
+machine SID. A password-free HOST profile can also detect this collision on
+the CLIENT before credential input.
+
+For a confirmed duplicate SID:
+
+1. Stop password resets and retries.
+2. Inventory every PC deployed from the same image.
+3. Back up data and application settings.
+4. Use a Microsoft-supported rebuild or Sysprep generalization plan.
+5. Recreate the HOST profile after Windows has a unique machine identity.
+
+Do not edit the machine SID in the registry or use an unsupported SID-changing
+utility. The toolkit deliberately does not automate Sysprep because it is a
+machine-lifecycle operation, not a printer repair.
+
+References:
+
+- [Microsoft: Kerberos and NTLM authentication failures due to duplicate SIDs](https://support.microsoft.com/en-us/servicing/os/windows/docs/2025/10/kerberos-and-ntlm-authentication-failures-due-to-duplicate-sids)
+- [Microsoft: Windows installation disk duplication and Sysprep](https://learn.microsoft.com/en-us/troubleshoot/windows-server/setup-upgrade-and-drivers/windows-installations-disk-duplication)
 
 ## SMB error 1909
 
@@ -94,5 +118,7 @@ Include:
 - Printer model.
 - Driver name and version.
 - Exact error code.
+- Whether HOST Full Diagnostic found LsaSrv Event 6167. Do not publish the raw
+  machine SID.
 - The method that failed (`/in` or Native Local Port fallback).
 - A sanitized log.

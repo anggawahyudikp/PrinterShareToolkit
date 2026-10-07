@@ -1,4 +1,4 @@
-# Printer Share Toolkit v1.1.2
+# Printer Share Toolkit v1.1.3
 
 ## User Guide
 
@@ -17,7 +17,7 @@ The toolkit does not depend on PaperCut.
 1. Extract the entire ZIP file to a normal local folder, for example:
 
    ```text
-   C:\PrinterShareToolkit_v1.1.2
+   C:\PrinterShareToolkit_v1.1.3
    ```
 
 2. Do not run `Core\Toolkit.ps1` directly. Start the toolkit with:
@@ -267,8 +267,18 @@ RPC may be blocked. Check firewall and routing between the HOST and CLIENT.
 
 ### SMB error 1326
 
-The username or password is incorrect. The toolkit stops and does not retry the
-password repeatedly.
+Error 1326 is a generic authentication failure. It can mean that the username
+or password is incorrect, but it can also appear when cloned Windows PCs have
+the same machine SID.
+
+The toolkit stops after one attempt. If a password-free HOST profile proves
+that the HOST and CLIENT machine SIDs match, credential input is skipped. Run
+Full Diagnostic on the HOST and check for LsaSrv Event 6167. That event is the
+Windows confirmation for the duplicate-SID condition.
+
+Do not keep resetting a known-good password. Inventory other PCs made from the
+same image, then plan a Microsoft-supported rebuild or Sysprep generalization.
+The toolkit does not run Sysprep or use third-party SID changers automatically.
 
 ### SMB error 1909
 

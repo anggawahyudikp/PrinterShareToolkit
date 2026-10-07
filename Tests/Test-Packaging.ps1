@@ -2,6 +2,8 @@ param([string]$OutputDirectory)
 $ErrorActionPreference='Stop'
 [void][IO.Directory]::CreateDirectory($OutputDirectory)
 $root=Split-Path -Parent $PSScriptRoot
+$builderSource=Get-Content -LiteralPath (Join-Path $root 'scripts\Build-Release.ps1') -Raw
+if($builderSource -notmatch 'IsNullOrWhiteSpace\(\$OutputDirectory\)'){throw 'Builder default output path is not initialized at runtime.'}
 $result=& (Join-Path $root 'scripts\Build-Release.ps1') -OutputDirectory $OutputDirectory
 if(-not (Test-Path -LiteralPath $result.Path)){throw 'Release ZIP missing.'}
 if(-not (Test-Path -LiteralPath ($result.Path+'.sha256'))){throw 'Release SHA256 sidecar missing.'}
@@ -17,4 +19,4 @@ $refused=$false
 try{& (Join-Path $root 'scripts\Build-Release.ps1') -OutputDirectory $OutputDirectory | Out-Null}catch{$refused=$true}
 if(-not $refused){throw 'Builder overwrote an existing release.'}
 Write-Host 'PASS: allowlisted release, manifest, SHA256, no runtime data, no overwrite.'
-return 5
+return 6

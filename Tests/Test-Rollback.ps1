@@ -29,7 +29,7 @@ function Disable-LocalUser {param($Name,$ErrorAction) $script:disabled=($Name -e
 $tx=Join-Path (Split-Path -Parent $fixture) 'Backup\HostTransaction-fixture'
 [void][IO.Directory]::CreateDirectory($tx)
 $state=[pscustomobject]@{
-    Schema='PSTK.HostTransaction/1';Version='1.1.2';Computer=$env:COMPUTERNAME;Status='Completed';Updated=(Get-Date).ToString('o')
+    Schema='PSTK.HostTransaction/1';Version='1.1.3';Computer=$env:COMPUTERNAME;Status='Completed';Updated=(Get-Date).ToString('o')
     Account=[pscustomobject]@{Name='Administrator';SID='S-1-5-21-100-200-300-500';Enabled=$false;EnabledByToolkit=$true;UnlockedByToolkit=$false;PasswordChanged=$false}
     Printer=[pscustomobject]@{Name='Fixture Printer';Shared=$false;ShareName='';PermissionSDDL='OLD';RenderingMode='CSR'}
     FirewallRules=@([pscustomobject]@{Name='FPS-Enabled';Enabled='True'},[pscustomobject]@{Name='FPS-Disabled';Enabled='False'})

@@ -27,7 +27,7 @@ Do not open a public issue containing exploit details, credentials, internal env
 
 ## Known Credential-Handling Limitation
 
-Version 1.1.2 invokes the Windows `cmdkey.exe` and `net.exe` utilities for SMB
+Version 1.1.3 invokes the Windows `cmdkey.exe` and `net.exe` utilities for SMB
 authentication. Windows requires the supplied password to be included in the
 child process command line for these utilities. The toolkit does not write that
 password to its logs or Profiles, but the command line may be observable during
@@ -36,6 +36,11 @@ execution by another sufficiently privileged local process or administrator.
 Run the toolkit only on a trusted administrative workstation and avoid reusing
 a highly privileged password. This limitation is tracked for replacement with
 a credential flow that does not expose plaintext in process arguments.
+
+HOST profiles may contain the machine SID prefix used for duplicate-clone
+detection. Treat it as environment metadata: redact it from public logs and
+issues. The toolkit does not run Sysprep, rewrite machine SIDs, or invoke
+third-party SID-changing utilities automatically.
 
 ## Supported Version
 

@@ -2,7 +2,7 @@
 
 Native Windows USB printer sharing with guided setup, repair, diagnostics, and cleanup.
 
-Current version: **v1.1.2**
+Current version: **v1.1.3**
 
 ## Why I Built This Toolkit
 
@@ -23,6 +23,8 @@ This toolkit was not built overnight. Most of its features came from real troubl
 - Strict Built-in Administrator **RID 500** readiness gate
 - TCP 445 / TCP 135 preflight
 - SMB authentication with one-attempt lockout guard
+- Duplicate machine SID preflight using password-free HOST profiles
+- Bounded LsaSrv Event 6167 diagnosis for cloned Windows installations
 - Server-Side Rendering (**SSR**) first
 - Primary install via `PrintUIEntry /in`
 - Native Local Port UNC fallback when standard connection fails
@@ -77,6 +79,7 @@ Main menu:
 Preflight
    |
    +-- TCP 445 / TCP 135
+   +-- HOST/CLIENT machine SID collision check
    +-- SMB authentication
    +-- Share verification
    |
@@ -102,6 +105,8 @@ Native Local Port UNC fallback
 
 - Passwords are not written to logs or host profile JSON.
 - SMB credential testing is limited to **one attempt** to reduce account-lockout risk.
+- A matching HOST/CLIENT machine SID stops the flow before credential input.
+- The toolkit never runs Sysprep or third-party SID-changing tools automatically.
 - CLIENT credentials may be stored in Windows Credential Manager for the user running the toolkit.
 - Do not upload unsanitized `Logs\`, `Profiles\`, screenshots, hostnames, internal IP addresses, or credentials to public issues.
 

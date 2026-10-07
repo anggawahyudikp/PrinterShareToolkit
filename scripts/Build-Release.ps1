@@ -1,8 +1,11 @@
 [CmdletBinding()]
-param([string]$OutputDirectory=(Join-Path $PSScriptRoot '..\dist'))
+param([string]$OutputDirectory)
 
 $ErrorActionPreference='Stop'
 $RepoRoot=(Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+if([string]::IsNullOrWhiteSpace($OutputDirectory)){
+    $OutputDirectory=Join-Path $RepoRoot 'dist'
+}
 $Version=(Get-Content -LiteralPath (Join-Path $RepoRoot 'VERSION') -Raw).Trim()
 if($Version -notmatch '^\d+\.\d+\.\d+(-[A-Za-z0-9.-]+)?$'){throw 'VERSION format is invalid.'}
 

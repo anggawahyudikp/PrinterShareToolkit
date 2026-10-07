@@ -34,6 +34,8 @@ Elevation / Administrator
   |                               |
   | TCP 445 / TCP 135             |
   | SSR policy                    |
+  | Profile machine SID check     |
+  |  '-- match -> stop pre-auth   |
   | RID500 credential             |
   | SMB auth ONCE                 |
   | Verify share                  |
@@ -59,7 +61,10 @@ Elevation / Administrator
 ## Important Gates
 
 - Credential test: one attempt only.
-- `1326`: stop — bad credential.
+- Matching profile machine SIDs: stop before credential input.
+- `1326`: stop — generic authentication failure; do not assume password alone.
+- LsaSrv Event `6167`: duplicate machine SID confirmed; rebuild/generalize the
+  affected Windows clone using a Microsoft-supported process.
 - `1909`: stop — account locked.
 - `1219`: stop / clean credential conflict.
 - `/in` is not run twice in parallel.

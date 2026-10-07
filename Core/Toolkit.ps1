@@ -1,5 +1,5 @@
-﻿# Printer Share Toolkit v1.1.2
-# Release v1.1.2
+﻿# Printer Share Toolkit v1.1.3
+# Release v1.1.3
 # Windows PowerShell 5.1+
 
 Set-StrictMode -Version 2.0
@@ -11,7 +11,7 @@ $BackupDir   = Join-Path $ToolkitRoot 'Backup'
 $ProfileDir  = Join-Path $ToolkitRoot 'Profiles'
 foreach($d in @($LogDir,$BackupDir,$ProfileDir)){ if(-not (Test-Path $d)){ New-Item -ItemType Directory -Path $d -Force | Out-Null } }
 $LogFile = Join-Path $LogDir ("PrinterToolkit-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
-"Printer Share Toolkit v1.1.2 - $(Get-Date)" | Out-File $LogFile -Encoding utf8
+"Printer Share Toolkit v1.1.3 - $(Get-Date)" | Out-File $LogFile -Encoding utf8
 
 $script:TechnicianMode = $false
 $script:ActiveHostJournal = $null
@@ -69,7 +69,7 @@ function Show-ToolkitHeader {
     param([string]$Screen='MAIN MENU')
     Clear-Host
     Write-Host '========================================================' -ForegroundColor Cyan
-    Write-Host '              PRINTER SHARE TOOLKIT v1.1.2' -ForegroundColor White
+    Write-Host '              PRINTER SHARE TOOLKIT v1.1.3' -ForegroundColor White
     Write-Host '========================================================' -ForegroundColor Cyan
     Write-Host (" Computer : {0}" -f $env:COMPUTERNAME)
     Write-Host (" User     : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
@@ -133,7 +133,7 @@ function New-HostTransaction {
     $dir=Join-Path $BackupDir ('HostTransaction-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'-'+[guid]::NewGuid().ToString('N').Substring(0,6))
     [void][IO.Directory]::CreateDirectory($dir)
     $state=[pscustomobject]@{
-        Schema='PSTK.HostTransaction/1';Version='1.1.2';Computer=$env:COMPUTERNAME
+        Schema='PSTK.HostTransaction/1';Version='1.1.3';Computer=$env:COMPUTERNAME
         Created=(Get-Date).ToString('o');Updated=(Get-Date).ToString('o');Status='Started'
         Account=$accountState;Printer=$null;FirewallRules=$rules
         SpoolerWasRunning=[bool]($spooler -and $spooler.Status -eq 'Running')
@@ -317,6 +317,41 @@ function Get-BuiltinAdmin {
         }
     }catch{}
     $null
+}
+
+function ConvertTo-MachineSid {
+    param([string]$Rid500Sid)
+    if($Rid500Sid -match '^S-1-5-21-(?:\d+-){2}\d+-500$'){return ($Rid500Sid -replace '-500$','')}
+    return $null
+}
+
+function Get-MachineSid {
+    $admin=Get-BuiltinAdmin
+    if($admin){return (ConvertTo-MachineSid -Rid500Sid ([string]$admin.SID))}
+    return $null
+}
+
+function Test-DuplicateMachineSidProfile {
+    param($Profile,[string]$LocalMachineSid=(Get-MachineSid))
+    if(-not $Profile -or -not $LocalMachineSid){return $false}
+    $property=$Profile.PSObject.Properties['HostMachineSid']
+    if(-not $property -or [string]::IsNullOrWhiteSpace([string]$property.Value)){return $false}
+    $hostSid=[string]$property.Value
+    if($hostSid -notmatch '^S-1-5-21-(?:\d+-){2}\d+$'){return $false}
+    $hostNameProperty=$Profile.PSObject.Properties['HostName']
+    $hostName=if($hostNameProperty){[string]$hostNameProperty.Value}else{''}
+    return ($hostSid -eq $LocalMachineSid -and $hostName -ine $env:COMPUTERNAME)
+}
+
+function Get-DuplicateMachineSidEvents {
+    param([int]$Minutes=30,[int]$MaxEvents=20)
+    try{
+        @(Get-WinEvent -FilterHashtable @{LogName='System';ProviderName='LsaSrv';Id=6167;StartTime=(Get-Date).AddMinutes(-1*$Minutes)} -MaxEvents $MaxEvents -ErrorAction Stop |
+            Select-Object TimeCreated,Id,ProviderName,@{N='Message';E={if($_.Message.Length -gt 2000){$_.Message.Substring(0,2000)}else{$_.Message}}})
+    }catch{
+        if($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*'){Write-Log ('LsaSrv 6167 audit unavailable: '+$_.Exception.Message) 'WARN'}
+        @()
+    }
 }
 function Get-AccountCim { param([string]$Name); Get-CimInstance Win32_UserAccount -Filter "LocalAccount=True AND Name='$($Name.Replace("'","''"))'" -ErrorAction SilentlyContinue }
 
@@ -536,7 +571,7 @@ function Backup-PrinterReg {
 }
 function Save-HostProfile {
     param($Admin,$Printer)
-    $o=[ordered]@{Version='1.1';Generated=(Get-Date).ToString('s');HostName=$env:COMPUTERNAME;HostIP=@((Get-IPv4List).IPAddress);Administrator=@{Name=$Admin.Name;SID=$Admin.SID;RID=500};Printer=@{Name=$Printer.Name;ShareName=$Printer.ShareName;DriverName=$Printer.DriverName;PortName=$Printer.PortName;SSR=$true;RenderingMode='SSR'}}
+    $o=[ordered]@{Version='1.2';Generated=(Get-Date).ToString('s');HostName=$env:COMPUTERNAME;HostMachineSid=(ConvertTo-MachineSid -Rid500Sid ([string]$Admin.SID));HostIP=@((Get-IPv4List).IPAddress);Administrator=@{Name=$Admin.Name;SID=$Admin.SID;RID=500};Printer=@{Name=$Printer.Name;ShareName=$Printer.ShareName;DriverName=$Printer.DriverName;PortName=$Printer.PortName;SSR=$true;RenderingMode='SSR'}}
     $f=Join-Path $ProfileDir ("{0}-{1}.json" -f $env:COMPUTERNAME,($Printer.ShareName -replace '[\\/:*?"<>|]','_')); $o|ConvertTo-Json -Depth 6|Set-Content $f -Encoding UTF8; $f
 }
 
@@ -1287,7 +1322,14 @@ function Invoke-ClientConnect {
 
     $profile=$null
     foreach($pf in @(Get-ChildItem $ProfileDir -Filter *.json -ErrorAction SilentlyContinue)){
-        try{ $x=Get-Content $pf.FullName -Raw|ConvertFrom-Json; if($x.HostIP -contains $server){$profile=$x;break} }catch{}
+        try{ $x=Get-Content $pf.FullName -Raw|ConvertFrom-Json; if($x.HostIP -contains $server -or $x.HostName -ieq $server){$profile=$x;break} }catch{}
+    }
+    if(Test-DuplicateMachineSidProfile -Profile $profile){
+        Write-Log 'CONFIRMED: the HOST profile and this CLIENT have the same machine SID. Windows blocks NTLM authentication between duplicate-SID machines.' 'ERROR'
+        Write-Host 'Credential input was skipped. A correct password cannot bypass duplicate-machine-SID protection.' -ForegroundColor Yellow
+        Write-Host 'On the HOST, run Full Diagnostic and confirm LsaSrv Event 6167. Stop password retries.' -ForegroundColor Yellow
+        Write-Host 'Inventory every PC cloned from the same image, then schedule a Microsoft-supported rebuild/Sysprep generalization. Do not use registry edits or third-party SID changers.' -ForegroundColor Yellow
+        Pause-Toolkit;return
     }
     if($profile){
         $defAdmin="$($profile.HostName)\$($profile.Administrator.Name)"
@@ -1317,7 +1359,10 @@ function Invoke-ClientConnect {
         if(-not $auth.Success){
             Write-Host $auth.Output -ForegroundColor Red
             if($auth.Locked){Write-Log 'ACCOUNT LOCKED (1909). Retries stopped.' 'ERROR'}
-            elseif($auth.Bad){Write-Log 'Credentials rejected (1326). Retries stopped.' 'ERROR'}
+            elseif($auth.Bad){
+                Write-Log 'Authentication returned 1326. Retries stopped. This can mean wrong credentials, but a HOST LsaSrv Event 6167 proves duplicate machine SID instead.' 'ERROR'
+                Write-Host 'Do not reset a known-good password repeatedly. Run Full Diagnostic on the HOST and check LsaSrv Event 6167.' -ForegroundColor Yellow
+            }
             elseif($auth.Conflict){Write-Log 'SMB conflict (1219).' 'ERROR'}
             else{Write-Log "SMB authentication failed with code=$($auth.Code)" 'ERROR'}
             Pause-Toolkit;return
@@ -1545,6 +1590,12 @@ function Invoke-FullDiagnostic {
     Write-Host '[PRINTERS]' -ForegroundColor Yellow; Get-Printer -Full -ErrorAction SilentlyContinue|Select Name,ComputerName,DriverName,PortName,Type,Shared,ShareName,RenderingMode,PrinterStatus|Format-Table -AutoSize
     Write-Host '[SMB CONNECTIONS]' -ForegroundColor Yellow; Get-SmbConnection -ErrorAction SilentlyContinue|Select ServerName,ShareName,UserName,Dialect,NumOpens|Format-Table -AutoSize
     Write-Host '[PRINTSERVICE ERRORS]' -ForegroundColor Yellow; Get-WinEvent -LogName 'Microsoft-Windows-PrintService/Admin' -MaxEvents 10 -ErrorAction SilentlyContinue|Where-Object{$_.LevelDisplayName -in @('Error','Warning')}|Select TimeCreated,Id,LevelDisplayName,Message|Format-List
+    Write-Host '[DUPLICATE MACHINE SID / LSASRV 6167]' -ForegroundColor Yellow
+    $sidEvents=@(Get-DuplicateMachineSidEvents)
+    if($sidEvents.Count){
+        Write-Host 'CONFIRMED: Windows detected a duplicate machine identity. Password retries will not fix this condition.' -ForegroundColor Red
+        $sidEvents | Format-List | Out-Host
+    }else{Write-Host 'No LsaSrv Event 6167 found in the last 30 minutes.' -ForegroundColor Green}
     $target=Read-Host 'Optional target HOST IP (ENTER=skip)'; if($target){foreach($pt in 445,135){$r=Test-NetConnection $target -Port $pt -WarningAction SilentlyContinue;Write-Host "TCP ${pt}: $($r.TcpTestSucceeded)"}; & net.exe view "\\$target"}
     Write-Log 'Full diagnostic completed.' 'OK'; Pause-Toolkit
 }
