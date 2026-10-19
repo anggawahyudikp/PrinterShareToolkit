@@ -31,6 +31,8 @@ This toolkit was not built overnight. Most of its features came from real troubl
 - Native driver detection / re-register
 - PendingDeletion queue recovery
 - Full diagnostic and Windows/SAM health check
+- Clear selected print jobs while keeping the printer and its settings installed
+- Separate printer removal with exact-name confirmation
 - Normal View + Technician View
 - Runtime logs, registry backup, and password-free host profiles
 - Transaction journal and rollback for reversible HOST changes
@@ -64,10 +66,11 @@ Main menu:
 [2] Connect / Repair Printer CLIENT
 [3] Built-in Administrator Readiness
 [4] Full Diagnostic
-[5] Cleanup Printer Queue
+[5] Clear Print Jobs (keep printer installed)
 [6] Test Print
 [7] Windows/SAM Health Check
 [8] Rollback Last HOST Setup
+[9] Remove Installed Printer
 [T] Technician View
 [L] Open Logs Folder
 [0] Exit

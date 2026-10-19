@@ -1600,9 +1600,78 @@ function Invoke-FullDiagnostic {
     Write-Log 'Full diagnostic completed.' 'OK'; Pause-Toolkit
 }
 function Invoke-Cleanup {
-    Show-ToolkitHeader 'CLEANUP PRINTER QUEUE'
-    $all=@(Get-Printer -Full -ErrorAction SilentlyContinue|Sort-Object Name); if(!$all){Pause-Toolkit;return}; for($i=0;$i -lt $all.Count;$i++){Write-Host ("[{0}] {1} | {2} | {3} | {4}" -f ($i+1),$all[$i].Name,$all[$i].DriverName,$all[$i].Type,$all[$i].RenderingMode)}
-    $n=0;if((-not [int]::TryParse((Read-Host 'Printer number (0=Cancel)'),[ref]$n)) -or $n -eq 0){return};if($n -lt 1 -or $n -gt $all.Count){return};$p=$all[$n-1];if(Confirm-Action "Remove '$($p.Name)'?" $false){try{Remove-Printer -Name $p.Name -ErrorAction Stop;Write-Log "Removed: $($p.Name)" 'OK'}catch{Write-Log $_.Exception.Message 'ERROR'}};Pause-Toolkit
+    Show-ToolkitHeader 'CLEAR PRINT JOBS'
+    Write-Host 'Cancel print jobs on one printer. The printer, driver, port, and preferences are kept.'
+    try{
+        $all=@(Get-Printer -Full -ErrorAction Stop | Sort-Object Name)
+        if(-not $all.Count){Write-UiStatus 'INFO' 'No installed printers were found.';return}
+        for($i=0;$i -lt $all.Count;$i++){
+            Write-Host ("[{0}] {1} | {2} | {3}" -f ($i+1),$all[$i].Name,$all[$i].DriverName,$all[$i].Type)
+        }
+        $n=0
+        if(-not [int]::TryParse((Read-Host 'Printer number (0=Cancel)'),[ref]$n) -or $n -eq 0){return}
+        if($n -lt 1 -or $n -gt $all.Count){Write-UiStatus 'WARN' 'Invalid printer number.';return}
+        $p=$all[$n-1]
+        $jobs=@(Get-PrintJob -PrinterName $p.Name -ErrorAction Stop | Sort-Object ID)
+        if(-not $jobs.Count){Write-UiStatus 'INFO' ("No print jobs on '{0}'. Nothing to clear." -f $p.Name);return}
+        Write-Host ("Printer: {0} | Jobs: {1}" -f $p.Name,$jobs.Count)
+        for($i=0;$i -lt $jobs.Count;$i++){
+            Write-Host ("[{0}] Job {1} | {2} | {3}" -f ($i+1),$jobs[$i].ID,$jobs[$i].DocumentName,$jobs[$i].JobStatus)
+        }
+        $choice=(Read-Host 'Job number, A=All listed jobs, 0=Cancel').Trim()
+        if($choice -eq '0' -or [string]::IsNullOrWhiteSpace($choice)){return}
+        $targets=@()
+        if($choice -ieq 'A'){$targets=@($jobs)}else{
+            $j=0
+            if(-not [int]::TryParse($choice,[ref]$j) -or $j -lt 1 -or $j -gt $jobs.Count){Write-UiStatus 'WARN' 'Invalid job number.';return}
+            $targets=@($jobs[$j-1])
+        }
+        if(-not (Confirm-Action ("Cancel {0} listed print job(s) on '{1}'? Documents must be resubmitted to print again." -f $targets.Count,$p.Name) $false)){return}
+        # Keep the original job-ID snapshot so new arrivals are never swept up.
+        $targetIds=@($targets | ForEach-Object {$_.ID})
+        $failures=0
+        foreach($job in $targets){
+            try{Remove-PrintJob -PrinterName $p.Name -ID $job.ID -ErrorAction Stop}
+            catch{$failures++;Write-Log ("Could not cancel job {0} on '{1}': {2}" -f $job.ID,$p.Name,$_.Exception.Message) 'ERROR'}
+        }
+        $deadline=(Get-Date).AddSeconds(5)
+        do{
+            $remaining=@(Get-PrintJob -PrinterName $p.Name -ErrorAction Stop)
+            $pending=@($remaining | Where-Object {$_.ID -in $targetIds})
+            if(-not $pending.Count -or (Get-Date) -ge $deadline){break}
+            Start-Sleep -Milliseconds 300
+        }while($true)
+        $installed=@(Get-Printer -Full -ErrorAction Stop | Where-Object {$_.Name -eq $p.Name})
+        if(-not $installed.Count){throw "The selected printer is no longer visible. Cleanup could not be verified."}
+        if($pending.Count -or $failures){
+            Write-Log ("Cleanup incomplete for '{0}': {1} selected job(s) still present; {2} cancellation error(s). The printer remains installed. Run Full Diagnostic if jobs stay stuck." -f $p.Name,$pending.Count,$failures) 'WARN'
+        }else{
+            Write-Log ("Cleared {0} selected print job(s) on '{1}'. Verified: the printer remains installed." -f $targets.Count,$p.Name) 'OK'
+        }
+        $otherJobs=@($remaining | Where-Object {$_.ID -notin $targetIds})
+        if($otherJobs.Count){Write-UiStatus 'INFO' ("{0} unselected or newly arrived job(s) were left in the queue." -f $otherJobs.Count)}
+    }catch{Write-Log ("Print-job cleanup failed: {0}" -f $_.Exception.Message) 'ERROR'}
+    finally{Pause-Toolkit}
+}
+function Invoke-RemoveInstalledPrinter {
+    Show-ToolkitHeader 'REMOVE INSTALLED PRINTER'
+    Write-Host 'This removes the installed printer or connection, including its queued jobs. Reinstallation may be required.' -ForegroundColor Yellow
+    try{
+        $all=@(Get-Printer -Full -ErrorAction Stop | Sort-Object Name)
+        if(-not $all.Count){Write-UiStatus 'INFO' 'No installed printers were found.';return}
+        for($i=0;$i -lt $all.Count;$i++){Write-Host ("[{0}] {1} | {2} | {3}" -f ($i+1),$all[$i].Name,$all[$i].DriverName,$all[$i].Type)}
+        $n=0
+        if(-not [int]::TryParse((Read-Host 'Printer number (0=Cancel)'),[ref]$n) -or $n -eq 0){return}
+        if($n -lt 1 -or $n -gt $all.Count){Write-UiStatus 'WARN' 'Invalid printer number.';return}
+        $p=$all[$n-1]
+        $typedName=Read-Host ("Type the exact printer name '{0}' to remove it (ENTER=Cancel)" -f $p.Name)
+        if($typedName -cne $p.Name){Write-UiStatus 'INFO' 'Printer removal cancelled. The name did not match.';return}
+        Remove-Printer -InputObject $p -ErrorAction Stop
+        $remaining=@(Get-Printer -Full -ErrorAction Stop | Where-Object {$_.Name -eq $p.Name})
+        if($remaining.Count){Write-Log ("Removal requested for '{0}', but it is still visible. Removal is not yet verified." -f $p.Name) 'WARN'}
+        else{Write-Log ("Removed installed printer: {0}. Driver packages were kept." -f $p.Name) 'OK'}
+    }catch{Write-Log ("Printer removal failed: {0}" -f $_.Exception.Message) 'ERROR'}
+    finally{Pause-Toolkit}
 }
 function Invoke-TestPrint {
     Show-ToolkitHeader 'TEST PRINT'
@@ -1619,10 +1688,11 @@ while($true){
     Write-Host ' [2] Connect / Repair Printer CLIENT'
     Write-Host ' [3] Built-in Administrator Readiness'
     Write-Host ' [4] Full Diagnostic'
-    Write-Host ' [5] Cleanup Printer Queue'
+    Write-Host ' [5] Clear Print Jobs (keep printer installed)'
     Write-Host ' [6] Test Print'
     Write-Host ' [7] Windows/SAM Health Check (Read Only)'
     Write-Host ' [8] Rollback Last HOST Setup'
+    Write-Host ' [9] Remove Installed Printer'
     Write-Host ''
     Write-Host (" [T] Technician View : {0}" -f $(if($script:TechnicianMode){'ON'}else{'OFF'})) -ForegroundColor $(if($script:TechnicianMode){'Yellow'}else{'Gray'})
     Write-Host ' [L] Open Logs Folder' -ForegroundColor Gray
@@ -1640,6 +1710,7 @@ while($true){
             '6'{Invoke-TestPrint}
             '7'{Invoke-HealthCheck}
             '8'{Restore-HostTransaction}
+            '9'{Invoke-RemoveInstalledPrinter}
             'T'{$script:TechnicianMode=-not $script:TechnicianMode}
             'L'{Start-Process explorer.exe $LogDir}
             '0'{break}

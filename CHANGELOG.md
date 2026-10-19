@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed Menu 5 deleting the installed printer instead of cancelling print jobs. It is now named `Clear Print Jobs` and supports one job or all listed jobs on the selected printer.
+- Keep the printer, driver, port, preferences, unselected jobs, and new arrivals during print-job cleanup; verify the result and report pending cancellation or errors.
+- Moved intentional printer removal to Menu 9 with exact-name confirmation and a separate warning.
+- Added mocked regression coverage for job cleanup, printer preservation, cancellation errors, new arrivals, and explicit printer removal.
+
 ## v1.1.3
 - Standardized the toolkit interface, runtime messages, comments, and public documentation in English.
 - Replaced the Indonesian usage guide with `Docs/USER_GUIDE.md` and updated release packaging references.

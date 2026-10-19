@@ -52,8 +52,9 @@ The toolkit does not depend on PaperCut.
 `[4] Full Diagnostic`
 : Audits the network, services, printers, drivers, SMB, SSR, and related state.
 
-`[5] Cleanup Printer Queue`
-: Cleans up a selected printer queue or stuck print jobs.
+`[5] Clear Print Jobs (keep printer installed)`
+: Cancels one or all listed print jobs on a selected printer, keeping the
+  installed printer, driver, port, and preferences.
 
 `[6] Test Print`
 : Sends a Windows test page to the selected printer.
@@ -63,6 +64,10 @@ The toolkit does not depend on PaperCut.
 
 `[8] Rollback Last HOST Setup`
 : Restores reversible changes recorded by the latest HOST transaction.
+
+`[9] Remove Installed Printer`
+: Removes the selected installed printer or connection after you type its exact
+  name. This is separate from clearing print jobs. Driver packages are kept.
 
 `[T] Technician View`
 : Toggles additional technical detail. Raw diagnostics are always kept in
@@ -236,17 +241,34 @@ Use Menu `[4]` when:
 Sanitize screenshots and logs before sharing them with another person or
 posting them in a GitHub issue.
 
-## J. Clean Up a Printer Queue
+## J. Clear Print Jobs or Remove a Printer
 
-Use Menu `[5]` when:
+Use Menu `[5] Clear Print Jobs` to cancel a stuck or unwanted document:
 
-- A print job is stuck.
-- The printer status does not change.
-- A queue is stuck in `PendingDeletion`.
-- An old job or queue prevents a replacement printer from working.
+1. Select the printer.
+2. Review its job list, including job IDs and document names.
+3. Select one job, or choose `A` for all jobs in that list.
+4. Confirm the cancellation. Cancelled documents must be resubmitted to print again.
 
-The toolkit avoids an aggressive global spool purge and limits cleanup to the
-selected queue whenever possible.
+The printer, driver, port, preferences, other printers, and unselected jobs are
+kept. Jobs that arrive after the list was loaded are not included in `A`.
+An empty queue requires no action. The toolkit checks the selected jobs for up
+to five seconds and verifies that the printer remains installed. If Windows
+rejects cancellation or jobs remain, it reports incomplete cleanup instead of
+claiming success. Use Full Diagnostic if cancellation stays pending; Menu `[5]`
+does not restart the Spooler or purge the global spool folder.
+
+Use Menu `[9] Remove Installed Printer` only when you intend to remove the
+printer or connection itself. Select the printer, then type its exact name to
+confirm. This can discard its queued jobs and require reinstallation. Driver
+packages are kept. A printer still visible after the request is reported as
+unverified, including a printer stuck in `PendingDeletion`.
+
+**Older releases:** Menu `[5] Cleanup Printer Queue` in v1.1.2 removes the
+installed printer. Do not use that version's menu to cancel print jobs. Use the
+Windows print queue to cancel documents, or use the updated source containing
+this fix. A printer already removed by the old menu must be added again; the
+fix does not restore its previous settings automatically.
 
 ## K. Common Errors
 
