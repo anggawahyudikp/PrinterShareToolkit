@@ -266,8 +266,8 @@ unverified, including a printer stuck in `PendingDeletion`.
 
 **Older releases:** Menu `[5] Cleanup Printer Queue` in v1.1.2 removes the
 installed printer. Do not use that version's menu to cancel print jobs. Use the
-Windows print queue to cancel documents, or use the updated source containing
-this fix. A printer already removed by the old menu must be added again; the
+Windows print queue to cancel documents, or upgrade to v1.1.3 or later.
+A printer already removed by the old menu must be added again; the
 fix does not restore its previous settings automatically.
 
 ## K. Common Errors
